@@ -1,0 +1,20 @@
+# Paste Protector configuration
+# Place at: ~/.config/paste-protector/config.toml
+
+# Seconds after last copy before clipboard is blocked (protects stale content)
+block_duration_ms = 10000
+
+# Key to press to override paste block
+# Options: RightCtrl, RightAlt, RightShift, F12
+override_key = "RightCtrl"
+
+# Notification position on screen
+# Options: top-right, top-left, bottom-right, bottom-left
+notif_position = "bottom-right"
+
+# How long the notification takes to fade (ms)
+notif_duration_ms = 1200
+
+# Enable/disable features independently
+notif_enabled = true
+block_enabled = true

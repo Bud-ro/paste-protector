@@ -1,0 +1,13 @@
+.{
+    .name = .paste_protector,
+    .version = "0.1.0",
+    .fingerprint = 0xdffdbada36e1a62,
+    .minimum_zig_version = "0.14.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "config.example.toml",
+    },
+    .dependencies = .{},
+}
