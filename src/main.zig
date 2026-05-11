@@ -7,10 +7,40 @@ const NotifKind = @import("core/notifier.zig").NotifKind;
 const Monitor = @import("core/monitor.zig").Monitor;
 const Event = @import("core/monitor.zig").Event;
 const time_util = @import("time_util.zig");
-const Io = std.Io;
-const File = std.Io.File;
 
-pub fn main(init: std.process.Init) !void {
+pub const std_options: std.Options = if (builtin.mode == .ReleaseSmall) .{
+    .enable_segfault_handler = false,
+    .signal_stack_size = null,
+    .log_level = .err,
+} else .{};
+
+// In ReleaseSmall, use a zero-overhead entry with no std.process.Init
+pub const main = if (builtin.mode == .ReleaseSmall) mainTiny else mainFull;
+
+fn mainTiny() void {
+    var config = Config{};
+
+    var monitor = Monitor.init(config) catch return;
+    defer monitor.deinit();
+
+    var blocker = Blocker.init(std.heap.page_allocator, config);
+    defer blocker.deinit();
+
+    var notifier = Notifier.init(config);
+    var clipboard_cleared = false;
+
+    while (true) {
+        processEvents(&monitor, &blocker, &notifier, &config, &clipboard_cleared) catch return;
+
+        if (builtin.os.tag == .windows) {
+            const win = @import("platform/windows.zig");
+            const sleep_ms: u32 = if (notifier.isActive() or blocker.isPasteBlocked()) 16 else 100;
+            win.sleep(sleep_ms);
+        }
+    }
+}
+
+fn mainFull(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
@@ -23,10 +53,10 @@ pub fn main(init: std.process.Init) !void {
     _ = args_iter.skip();
     while (args_iter.next()) |arg| {
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            try File.stdout().writeStreamingAll(io, usage_text);
+            try std.Io.File.stdout().writeStreamingAll(io, usage_text);
             return;
         } else if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-V")) {
-            try File.stdout().writeStreamingAll(io, "paste-protector 0.1.0\n");
+            try std.Io.File.stdout().writeStreamingAll(io, "paste-protector 0.1.0\n");
             return;
         } else if (std.mem.eql(u8, arg, "--config")) {
             config_path = args_iter.next();
