@@ -7,7 +7,7 @@ const NotifScale = config_mod.NotifScale;
 
 test "defaults" {
     const c = Config{};
-    try std.testing.expectEqual(3000, c.block_duration_ms);
+    try std.testing.expectEqual(5000, c.block_duration_ms);
     try std.testing.expectEqual(.right_ctrl, c.override_key);
     try std.testing.expectEqual(.bottom_right, c.notif_position);
     try std.testing.expectEqual(1200, c.notif_duration_ms);
@@ -53,14 +53,14 @@ test "invalid values fall back to defaults" {
         \\override_key = "BogusKey"
         \\notif_position = "nowhere"
     );
-    try std.testing.expectEqual(3000, c.block_duration_ms);
+    try std.testing.expectEqual(5000, c.block_duration_ms);
     try std.testing.expectEqual(.right_ctrl, c.override_key);
     try std.testing.expectEqual(.bottom_right, c.notif_position);
 }
 
 test "empty input" {
     const c = Config.parseForTest("");
-    try std.testing.expectEqual(3000, c.block_duration_ms);
+    try std.testing.expectEqual(5000, c.block_duration_ms);
 }
 
 test "whitespace handling" {

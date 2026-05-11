@@ -41,7 +41,7 @@ pub const NotifScale = enum {
 };
 
 pub const Config = struct {
-    block_duration_ms: u32 = 3000,
+    block_duration_ms: u32 = 5000,
     override_key: OverrideKey = .right_ctrl,
     notif_position: NotifPosition = .bottom_right,
     notif_duration_ms: u32 = 1200,
