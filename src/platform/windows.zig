@@ -777,14 +777,23 @@ pub fn restoreClipboard(ctx: *Context, content: []const u8) !void {
     }
     _ = EmptyClipboard();
 
-    // Restore all saved formats (text, images, etc.)
-    for (ctx.saved_formats[0..ctx.saved_format_count]) |*sf| {
-        if (sf.data) |d| {
-            _ = SetClipboardData(sf.format, d);
-            sf.data = null; // ownership transferred to clipboard
-        }
+    // Copy saved data into new handles for the clipboard (keep originals for future restores)
+    for (ctx.saved_formats[0..ctx.saved_format_count]) |sf| {
+        const src_handle = sf.data orelse continue;
+        const size = GlobalSize(src_handle);
+        if (size == 0) continue;
+        const src_ptr = GlobalLock(src_handle) orelse continue;
+        defer _ = GlobalUnlock(src_handle);
+
+        const dst = GlobalAlloc(GMEM_MOVEABLE, size) orelse continue;
+        const dst_ptr = GlobalLock(dst) orelse {
+            _ = GlobalFree(dst);
+            continue;
+        };
+        @memcpy(dst_ptr[0..size], src_ptr[0..size]);
+        _ = GlobalUnlock(dst);
+        _ = SetClipboardData(sf.format, dst);
     }
-    ctx.saved_format_count = 0;
 
     _ = CloseClipboard();
 }
