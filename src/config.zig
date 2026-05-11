@@ -1,8 +1,4 @@
 const std = @import("std");
-const Io = std.Io;
-const Dir = std.Io.Dir;
-const File = std.Io.File;
-const Environ = std.process.Environ;
 
 pub const OverrideKey = enum {
     right_ctrl,
@@ -50,7 +46,8 @@ pub const Config = struct {
     block_enabled: bool = true,
     paste_resets_timer: bool = true,
 
-    pub fn load(allocator: std.mem.Allocator, io: Io, environ_map: *Environ.Map) !Config {
+    // IO-dependent functions use local imports to avoid pulling in std.Io globally
+    pub fn load(allocator: std.mem.Allocator, io: std.Io, environ_map: *std.process.Environ.Map) !Config {
         const path = getConfigPath(allocator, environ_map) catch return Config{};
         defer allocator.free(path);
 
@@ -60,15 +57,15 @@ pub const Config = struct {
         return parse(content);
     }
 
-    pub fn loadFromFile(allocator: std.mem.Allocator, io: Io, path: []const u8) !Config {
+    pub fn loadFromFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Config {
         const content = try readFile(allocator, io, path);
         defer allocator.free(content);
 
         return parse(content);
     }
 
-    fn readFile(allocator: std.mem.Allocator, io: Io, path: []const u8) ![]u8 {
-        const file = try Dir.cwd().openFile(io, path, .{});
+    fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
+        const file = try std.Io.Dir.cwd().openFile(io, path, .{});
         defer file.close(io);
         const stat = try file.stat(io);
         if (stat.size == 0 or stat.size > 64 * 1024) return error.InvalidFileSize;
@@ -148,7 +145,7 @@ pub const Config = struct {
         return std.mem.eql(u8, val, "true");
     }
 
-    fn getConfigPath(allocator: std.mem.Allocator, env: *Environ.Map) ![]const u8 {
+    fn getConfigPath(allocator: std.mem.Allocator, env: *std.process.Environ.Map) ![]const u8 {
         if (env.get("XDG_CONFIG_HOME")) |xdg| {
             return std.fmt.allocPrint(allocator, "{s}/paste-protector/config.toml", .{xdg});
         }

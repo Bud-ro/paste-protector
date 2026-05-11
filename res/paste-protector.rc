@@ -1,9 +1,3 @@
-// Windows resource file
 #include <winuser.h>
-
-// Application icons
 1 ICON "res/icon.ico"
-2 ICON "res/icon-error.ico"
-
-// Application manifest
 1 RT_MANIFEST "res/paste-protector.manifest"

@@ -20,12 +20,12 @@ pub const Notification = struct {
 
     pub fn alpha(self: *const Notification, now: i128) f32 {
         const t = self.progress(now);
-        return 0.9 * (1.0 - easeOutCubic(t));
+        return 0.9 * (1.0 - easeOutExpo(t));
     }
 
     pub fn yOffset(self: *const Notification, now: i128) f32 {
         const t = self.progress(now);
-        return -40.0 * easeOutCubic(t);
+        return -40.0 * easeOutExpo(t);
     }
 
     pub fn isExpired(self: *const Notification, now: i128) bool {
@@ -33,9 +33,9 @@ pub const Notification = struct {
     }
 };
 
-fn easeOutCubic(t: f32) f32 {
-    const inv = 1.0 - t;
-    return 1.0 - (inv * inv * inv);
+fn easeOutExpo(t: f32) f32 {
+    if (t >= 1.0) return 1.0;
+    return 1.0 - @exp2(-10.0 * t);
 }
 
 pub const TickResult = struct {
