@@ -62,7 +62,13 @@ pub const Notifier = struct {
             .override_hint => 6000 * std.time.ns_per_ms,
         };
 
-        // Derive x jitter from timestamp — varies by [-0.5, 0.5] (normalized)
+        // Clear notifications of a different kind
+        for (&self.slots) |*slot| {
+            if (slot.*) |n| {
+                if (n.kind != kind) slot.* = null;
+            }
+        }
+
         const hash: u32 = @truncate(@as(u128, @bitCast(now)) *% 2654435761);
         const jitter: f32 = (@as(f32, @floatFromInt(hash % 1000)) / 1000.0) - 0.5;
 
