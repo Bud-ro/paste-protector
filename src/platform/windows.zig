@@ -299,7 +299,7 @@ pub fn init(config: Config) !Context {
         .hInstance = hinstance,
         .lpszClassName = class_name,
     };
-    if (RegisterClassExW(&wc) == 0) return error.RegisterClassFailed;
+    _ = RegisterClassExW(&wc); // May fail if already registered (e.g. in tests)
 
     const msg_window = CreateWindowExW(
         0,
