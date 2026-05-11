@@ -25,6 +25,14 @@ pub fn build(b: *std.Build) void {
         mod.linkSystemLibrary("Xfixes", .{});
         mod.linkSystemLibrary("Xrender", .{});
     } else if (os == .macos) {
+        // For cross-compilation, provide SDK path:
+        //   zig fetch git+https://github.com/AeroNotix/macos-sdk.git
+        //   zig build -Dmacos-sdk=~/.cache/zig/p/HASH -Dtarget=aarch64-macos
+        if (b.option([]const u8, "macos-sdk", "Path to macOS SDK (for cross-compilation)")) |sdk_path| {
+            mod.addSystemFrameworkPath(.{ .cwd_relative = b.fmt("{s}/Frameworks", .{sdk_path}) });
+            mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{sdk_path}) });
+            mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/lib", .{sdk_path}) });
+        }
         mod.linkFramework("AppKit", .{});
         mod.linkFramework("CoreGraphics", .{});
         mod.linkFramework("CoreFoundation", .{});

@@ -29,7 +29,7 @@ fn macosNanoTimestamp() i128 {
         S.numer = info.numer;
         S.denom = info.denom;
     }
-    return @as(i128, ticks) * S.numer / S.denom;
+    return @divFloor(@as(i128, ticks) * S.numer, S.denom);
 }
 
 fn windowsNanoTimestamp() i128 {
