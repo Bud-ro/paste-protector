@@ -20,12 +20,12 @@ pub const Notification = struct {
 
     pub fn alpha(self: *const Notification, now: i128) f32 {
         const t = self.progress(now);
-        return 0.9 * (1.0 - easeInCubic(t));
+        return 1.0 - easeInCubic(t);
     }
 
     pub fn yOffset(self: *const Notification, now: i128) f32 {
         const t = self.progress(now);
-        return -40.0 * easeInCubic(t);
+        return -40.0 * t;
     }
 
     pub fn isExpired(self: *const Notification, now: i128) bool {
