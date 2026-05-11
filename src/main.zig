@@ -23,7 +23,8 @@ fn mainTiny() void {
     var monitor = Monitor.init(config) catch return;
     defer monitor.deinit();
 
-    var blocker = Blocker.init(std.heap.page_allocator, config);
+    const allocator = if (builtin.single_threaded) std.heap.page_allocator else std.heap.smp_allocator;
+    var blocker = Blocker.init(allocator, config);
     defer blocker.deinit();
 
     var notifier = Notifier.init(config);
