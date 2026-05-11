@@ -722,14 +722,14 @@ fn freeSavedFormats(ctx: *Context) void {
 }
 
 pub fn clearClipboard(ctx: *Context) !void {
-    // Save all clipboard formats before clearing
-    freeSavedFormats(ctx);
     if (OpenClipboard(null) == .FALSE) return error.OpenClipboardFailed;
 
+    // Save current clipboard formats into a temp array
+    var new_formats: [16]SavedFormat = [_]SavedFormat{.{}} ** 16;
     var count: u32 = 0;
     var fmt: UINT = EnumClipboardFormats(0);
     while (fmt != 0 and count < 16) {
-        // Skip non-memory formats (GDI handles like CF_BITMAP, CF_PALETTE, CF_METAFILEPICT)
+        // Skip non-memory formats (GDI bitmap/metafile/palette/enhmetafile handles)
         if (fmt == 2 or fmt == 9 or fmt == 3 or fmt == 14) {
             fmt = EnumClipboardFormats(fmt);
             continue;
@@ -748,7 +748,7 @@ pub fn clearClipboard(ctx: *Context) !void {
                     if (dp) |dest_ptr| {
                         @memcpy(dest_ptr[0..size], sp[0..size]);
                         _ = GlobalUnlock(d);
-                        ctx.saved_formats[count] = .{ .format = fmt, .data = d };
+                        new_formats[count] = .{ .format = fmt, .data = d };
                         count += 1;
                     } else {
                         _ = GlobalFree(d);
@@ -759,11 +759,18 @@ pub fn clearClipboard(ctx: *Context) !void {
         }
         fmt = EnumClipboardFormats(fmt);
     }
-    ctx.saved_format_count = count;
 
     g_suppress_next_clipboard = true;
     _ = EmptyClipboard();
     _ = CloseClipboard();
+
+    // Only replace saved formats after successful save+clear
+    if (count > 0) {
+        freeSavedFormats(ctx);
+        ctx.saved_formats = new_formats;
+        ctx.saved_format_count = count;
+    }
+    // If count == 0 (clipboard was empty/unreadable), keep existing saved formats
 }
 
 pub fn restoreClipboard(ctx: *Context, content: []const u8) !void {

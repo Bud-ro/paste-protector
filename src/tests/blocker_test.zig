@@ -162,6 +162,37 @@ test "full lifecycle" {
     try std.testing.expectEqual(.allowing, b.state);
 }
 
+test "override and reblock cycle preserves content" {
+    var b = Blocker.init(std.testing.allocator, Config{});
+    defer b.deinit();
+
+    b.onCopyDetected("image_data", T0);
+
+    // First block
+    _ = b.tick(T0 + 3000 * MS);
+    try std.testing.expect(b.isPasteBlocked());
+    try std.testing.expectEqualStrings("image_data", b.getSavedContent().?);
+
+    // Override restarts timer
+    try std.testing.expect(b.onOverrideKey(T0 + 4000 * MS));
+    try std.testing.expectEqual(.allowing, b.state);
+    try std.testing.expectEqualStrings("image_data", b.getSavedContent().?);
+
+    // Second block
+    _ = b.tick(T0 + 7000 * MS);
+    try std.testing.expect(b.isPasteBlocked());
+    try std.testing.expectEqualStrings("image_data", b.getSavedContent().?);
+
+    // Override again — content still available
+    try std.testing.expect(b.onOverrideKey(T0 + 8000 * MS));
+    try std.testing.expectEqualStrings("image_data", b.getSavedContent().?);
+
+    // Third block
+    _ = b.tick(T0 + 11000 * MS);
+    try std.testing.expect(b.isPasteBlocked());
+    try std.testing.expectEqualStrings("image_data", b.getSavedContent().?);
+}
+
 test "copy after block resets to allowing" {
     var b = Blocker.init(std.testing.allocator, Config{});
     defer b.deinit();
