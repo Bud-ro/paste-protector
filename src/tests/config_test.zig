@@ -4,6 +4,7 @@ const Config = config_mod.Config;
 const OverrideKey = config_mod.OverrideKey;
 const NotifPosition = config_mod.NotifPosition;
 const NotifScale = config_mod.NotifScale;
+const MonitorMode = config_mod.MonitorMode;
 
 test "defaults" {
     const c = Config{};
@@ -166,4 +167,131 @@ test "scale factor values" {
     try std.testing.expectEqual(@as(f32, 2.0), NotifScale.x2.factor());
     try std.testing.expectEqual(@as(f32, 3.0), NotifScale.x3.factor());
     try std.testing.expectEqual(@as(f32, 4.0), NotifScale.x4.factor());
+}
+
+test "notif_monitor defaults" {
+    const c = Config{};
+    try std.testing.expectEqual(.current_screen, c.notif_monitor);
+}
+
+test "notif_monitor parsing" {
+    inline for (.{
+        .{ "current", MonitorMode.current_screen },
+        .{ "primary", MonitorMode.primary },
+        .{ "1", MonitorMode.monitor_1 },
+        .{ "2", MonitorMode.monitor_2 },
+        .{ "3", MonitorMode.monitor_3 },
+        .{ "4", MonitorMode.monitor_4 },
+    }) |pair| {
+        try std.testing.expectEqual(pair[1], Config.parseForTest("notif_monitor = " ++ pair[0]).notif_monitor);
+    }
+}
+
+test "notif_monitor invalid falls back to current_screen" {
+    const c = Config.parseForTest("notif_monitor = \"bogus\"");
+    try std.testing.expectEqual(.current_screen, c.notif_monitor);
+}
+
+test "formatToml produces valid TOML" {
+    const config = Config{};
+    var buf: [1024]u8 = undefined;
+    const len = config_mod.formatToml(config, &buf);
+    try std.testing.expect(len > 0);
+
+    // Verify the output contains expected keys
+    const output = buf[0..len];
+    try std.testing.expect(std.mem.indexOf(u8, output, "block_duration_ms = 5000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "override_key = \"RightCtrl\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "notif_position = \"bottom-right\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "notif_enabled = true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "notif_scale = \"2\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "block_enabled = true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "paste_resets_timer = true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "notif_monitor = \"current\"") != null);
+}
+
+test "formatToml roundtrip default config" {
+    const original = Config{};
+    var buf: [1024]u8 = undefined;
+    const len = config_mod.formatToml(original, &buf);
+    const parsed = Config.parseForTest(buf[0..len]);
+
+    try std.testing.expectEqual(original.block_duration_ms, parsed.block_duration_ms);
+    try std.testing.expectEqual(original.override_key, parsed.override_key);
+    try std.testing.expectEqual(original.notif_position, parsed.notif_position);
+    try std.testing.expectEqual(original.notif_duration_ms, parsed.notif_duration_ms);
+    try std.testing.expectEqual(original.notif_enabled, parsed.notif_enabled);
+    try std.testing.expectEqual(original.notif_scale, parsed.notif_scale);
+    try std.testing.expectEqual(original.block_enabled, parsed.block_enabled);
+    try std.testing.expectEqual(original.paste_resets_timer, parsed.paste_resets_timer);
+    try std.testing.expectEqual(original.notif_monitor, parsed.notif_monitor);
+}
+
+test "formatToml roundtrip non-default config" {
+    const original = Config{
+        .block_duration_ms = 7777,
+        .override_key = .f12,
+        .notif_position = .top_left,
+        .notif_duration_ms = 1234,
+        .notif_enabled = false,
+        .notif_scale = .x1_5,
+        .block_enabled = false,
+        .paste_resets_timer = false,
+        .notif_monitor = .monitor_3,
+    };
+    var buf: [1024]u8 = undefined;
+    const len = config_mod.formatToml(original, &buf);
+    const parsed = Config.parseForTest(buf[0..len]);
+
+    try std.testing.expectEqual(original.block_duration_ms, parsed.block_duration_ms);
+    try std.testing.expectEqual(original.override_key, parsed.override_key);
+    try std.testing.expectEqual(original.notif_position, parsed.notif_position);
+    try std.testing.expectEqual(original.notif_duration_ms, parsed.notif_duration_ms);
+    try std.testing.expectEqual(original.notif_enabled, parsed.notif_enabled);
+    try std.testing.expectEqual(original.notif_scale, parsed.notif_scale);
+    try std.testing.expectEqual(original.block_enabled, parsed.block_enabled);
+    try std.testing.expectEqual(original.paste_resets_timer, parsed.paste_resets_timer);
+    try std.testing.expectEqual(original.notif_monitor, parsed.notif_monitor);
+}
+
+test "formatToml roundtrip all enum combinations" {
+    // Test all override keys
+    inline for (.{ OverrideKey.right_ctrl, OverrideKey.right_alt, OverrideKey.right_shift, OverrideKey.f12 }) |key| {
+        var c = Config{};
+        c.override_key = key;
+        var buf: [1024]u8 = undefined;
+        const len = config_mod.formatToml(c, &buf);
+        const parsed = Config.parseForTest(buf[0..len]);
+        try std.testing.expectEqual(key, parsed.override_key);
+    }
+
+    // Test all positions
+    inline for (.{ NotifPosition.top_left, NotifPosition.top_right, NotifPosition.bottom_left, NotifPosition.bottom_right }) |pos| {
+        var c = Config{};
+        c.notif_position = pos;
+        var buf: [1024]u8 = undefined;
+        const len = config_mod.formatToml(c, &buf);
+        const parsed = Config.parseForTest(buf[0..len]);
+        try std.testing.expectEqual(pos, parsed.notif_position);
+    }
+
+    // Test all scales
+    inline for (.{ NotifScale.x1, NotifScale.x1_5, NotifScale.x2, NotifScale.x3, NotifScale.x4 }) |scale| {
+        var c = Config{};
+        c.notif_scale = scale;
+        var buf: [1024]u8 = undefined;
+        const len = config_mod.formatToml(c, &buf);
+        const parsed = Config.parseForTest(buf[0..len]);
+        try std.testing.expectEqual(scale, parsed.notif_scale);
+    }
+
+    // Test all monitor modes
+    inline for (.{ MonitorMode.current_screen, MonitorMode.primary, MonitorMode.monitor_1, MonitorMode.monitor_2, MonitorMode.monitor_3, MonitorMode.monitor_4 }) |mode| {
+        var c = Config{};
+        c.notif_monitor = mode;
+        var buf: [1024]u8 = undefined;
+        const len = config_mod.formatToml(c, &buf);
+        const parsed = Config.parseForTest(buf[0..len]);
+        try std.testing.expectEqual(mode, parsed.notif_monitor);
+    }
 }

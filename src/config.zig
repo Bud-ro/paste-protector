@@ -14,6 +14,15 @@ pub const NotifPosition = enum {
     bottom_left,
 };
 
+pub const MonitorMode = enum {
+    current_screen,
+    primary,
+    monitor_1,
+    monitor_2,
+    monitor_3,
+    monitor_4,
+};
+
 pub const NotifScale = enum {
     x1,
     x1_5,
@@ -45,6 +54,7 @@ pub const Config = struct {
     notif_scale: NotifScale = .x2,
     block_enabled: bool = true,
     paste_resets_timer: bool = true,
+    notif_monitor: MonitorMode = .current_screen,
 
     // IO-dependent functions use local imports to avoid pulling in std.Io globally
     pub fn load(allocator: std.mem.Allocator, io: std.Io, environ_map: *std.process.Environ.Map) !Config {
@@ -108,6 +118,8 @@ pub const Config = struct {
                 config.block_enabled = parseBool(val);
             } else if (std.mem.eql(u8, key, "paste_resets_timer")) {
                 config.paste_resets_timer = parseBool(val);
+            } else if (std.mem.eql(u8, key, "notif_monitor")) {
+                config.notif_monitor = parseMonitorMode(val);
             }
         }
 
@@ -145,6 +157,16 @@ pub const Config = struct {
         return std.mem.eql(u8, val, "true");
     }
 
+    fn parseMonitorMode(val: []const u8) MonitorMode {
+        if (std.mem.eql(u8, val, "current")) return .current_screen;
+        if (std.mem.eql(u8, val, "primary")) return .primary;
+        if (std.mem.eql(u8, val, "1")) return .monitor_1;
+        if (std.mem.eql(u8, val, "2")) return .monitor_2;
+        if (std.mem.eql(u8, val, "3")) return .monitor_3;
+        if (std.mem.eql(u8, val, "4")) return .monitor_4;
+        return .current_screen;
+    }
+
     fn getConfigPath(allocator: std.mem.Allocator, env: *std.process.Environ.Map) ![]const u8 {
         if (env.get("XDG_CONFIG_HOME")) |xdg| {
             return std.fmt.allocPrint(allocator, "{s}/paste-protector/config.toml", .{xdg});
@@ -158,3 +180,110 @@ pub const Config = struct {
         return error.NoConfigPath;
     }
 };
+
+pub fn formatToml(config: Config, buf: []u8) usize {
+    var pos: usize = 0;
+
+    // block_duration_ms
+    pos = appendStr(buf, pos, "block_duration_ms = ");
+    pos = appendU32(buf, pos, config.block_duration_ms);
+    pos = appendStr(buf, pos, "\n");
+
+    // override_key
+    pos = appendStr(buf, pos, "override_key = \"");
+    pos = appendStr(buf, pos, switch (config.override_key) {
+        .right_ctrl => "RightCtrl",
+        .right_alt => "RightAlt",
+        .right_shift => "RightShift",
+        .f12 => "F12",
+    });
+    pos = appendStr(buf, pos, "\"\n");
+
+    // notif_position
+    pos = appendStr(buf, pos, "notif_position = \"");
+    pos = appendStr(buf, pos, switch (config.notif_position) {
+        .top_right => "top-right",
+        .top_left => "top-left",
+        .bottom_right => "bottom-right",
+        .bottom_left => "bottom-left",
+    });
+    pos = appendStr(buf, pos, "\"\n");
+
+    // notif_duration_ms
+    pos = appendStr(buf, pos, "notif_duration_ms = ");
+    pos = appendU32(buf, pos, config.notif_duration_ms);
+    pos = appendStr(buf, pos, "\n");
+
+    // notif_enabled
+    pos = appendStr(buf, pos, "notif_enabled = ");
+    pos = appendStr(buf, pos, if (config.notif_enabled) "true" else "false");
+    pos = appendStr(buf, pos, "\n");
+
+    // notif_scale
+    pos = appendStr(buf, pos, "notif_scale = \"");
+    pos = appendStr(buf, pos, switch (config.notif_scale) {
+        .x1 => "1",
+        .x1_5 => "1.5",
+        .x2 => "2",
+        .x3 => "3",
+        .x4 => "4",
+    });
+    pos = appendStr(buf, pos, "\"\n");
+
+    // block_enabled
+    pos = appendStr(buf, pos, "block_enabled = ");
+    pos = appendStr(buf, pos, if (config.block_enabled) "true" else "false");
+    pos = appendStr(buf, pos, "\n");
+
+    // paste_resets_timer
+    pos = appendStr(buf, pos, "paste_resets_timer = ");
+    pos = appendStr(buf, pos, if (config.paste_resets_timer) "true" else "false");
+    pos = appendStr(buf, pos, "\n");
+
+    // notif_monitor
+    pos = appendStr(buf, pos, "notif_monitor = \"");
+    pos = appendStr(buf, pos, switch (config.notif_monitor) {
+        .current_screen => "current",
+        .primary => "primary",
+        .monitor_1 => "1",
+        .monitor_2 => "2",
+        .monitor_3 => "3",
+        .monitor_4 => "4",
+    });
+    pos = appendStr(buf, pos, "\"\n");
+
+    return pos;
+}
+
+fn appendStr(buf: []u8, pos: usize, s: []const u8) usize {
+    if (pos + s.len > buf.len) return pos;
+    @memcpy(buf[pos..][0..s.len], s);
+    return pos + s.len;
+}
+
+fn appendU32(buf: []u8, pos: usize, val: u32) usize {
+    // Convert u32 to decimal string
+    var tmp: [10]u8 = undefined;
+    var v = val;
+    var len: usize = 0;
+    if (v == 0) {
+        tmp[0] = '0';
+        len = 1;
+    } else {
+        while (v > 0) : (len += 1) {
+            tmp[len] = @intCast((v % 10) + '0');
+            v /= 10;
+        }
+        // Reverse
+        var i: usize = 0;
+        var j: usize = len - 1;
+        while (i < j) {
+            const t = tmp[i];
+            tmp[i] = tmp[j];
+            tmp[j] = t;
+            i += 1;
+            j -= 1;
+        }
+    }
+    return appendStr(buf, pos, tmp[0..len]);
+}

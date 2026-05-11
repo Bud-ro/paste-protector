@@ -107,11 +107,20 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
             .tray_key_ralt => config.override_key = .right_alt,
             .tray_key_rshift => config.override_key = .right_shift,
             .tray_key_f12 => config.override_key = .f12,
+            .tray_monitor_current => config.notif_monitor = .current_screen,
+            .tray_monitor_primary => config.notif_monitor = .primary,
+            .tray_monitor_1 => config.notif_monitor = .monitor_1,
+            .tray_monitor_2 => config.notif_monitor = .monitor_2,
+            .tray_monitor_3 => config.notif_monitor = .monitor_3,
+            .tray_monitor_4 => config.notif_monitor = .monitor_4,
             .none => break,
         }
         // Push config updates to platform on any tray config change
         if (event != .none and event != .copy_detected and event != .paste_attempted and event != .override_key_pressed) {
             monitor.updateConfig(config.*);
+            if (builtin.os.tag == .windows) {
+                @import("platform/windows.zig").saveConfig(config.*);
+            }
         }
     }
 

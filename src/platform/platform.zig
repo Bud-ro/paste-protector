@@ -38,6 +38,12 @@ pub const Event = enum {
     tray_key_ralt,
     tray_key_rshift,
     tray_key_f12,
+    tray_monitor_current,
+    tray_monitor_primary,
+    tray_monitor_1,
+    tray_monitor_2,
+    tray_monitor_3,
+    tray_monitor_4,
     none,
 };
 

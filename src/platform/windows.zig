@@ -4,6 +4,7 @@ const NotifKind = @import("../core/notifier.zig").NotifKind;
 const NotifPosition = @import("../config.zig").NotifPosition;
 const NotifScale = @import("../config.zig").NotifScale;
 const OverrideKey = @import("../config.zig").OverrideKey;
+const MonitorMode = @import("../config.zig").MonitorMode;
 const Event = @import("platform.zig").Event;
 const render = @import("../render.zig");
 
@@ -38,6 +39,15 @@ const BLENDFUNCTION = extern struct {
     SourceConstantAlpha: BYTE = 255,
     AlphaFormat: BYTE = 1, // AC_SRC_ALPHA
 };
+
+const MONITORINFO = extern struct {
+    cbSize: DWORD = @sizeOf(MONITORINFO),
+    rcMonitor: RECT,
+    rcWork: RECT,
+    dwFlags: DWORD,
+};
+const MONITOR_DEFAULTTOPRIMARY: DWORD = 1;
+const MONITOR_DEFAULTTONEAREST: DWORD = 2;
 
 const MSG = extern struct {
     hwnd: ?HWND,
@@ -146,6 +156,11 @@ const GMEM_MOVEABLE: UINT = 0x0002;
 
 const HOTKEY_ID: c_int = 1;
 
+const GENERIC_WRITE: DWORD = 0x40000000;
+const CREATE_ALWAYS: DWORD = 2;
+const FILE_ATTRIBUTE_NORMAL: DWORD = 0x80;
+const INVALID_HANDLE_VALUE: HANDLE = @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))));
+
 const SM_CXSCREEN: c_int = 0;
 const SM_CYSCREEN: c_int = 1;
 
@@ -187,6 +202,12 @@ const IDM_KEY_RCTRL: UINT = 1040;
 const IDM_KEY_RALT: UINT = 1041;
 const IDM_KEY_RSHIFT: UINT = 1042;
 const IDM_KEY_F12: UINT = 1043;
+const IDM_MON_CURRENT: UINT = 1050;
+const IDM_MON_PRIMARY: UINT = 1051;
+const IDM_MON_1: UINT = 1052;
+const IDM_MON_2: UINT = 1053;
+const IDM_MON_3: UINT = 1054;
+const IDM_MON_4: UINT = 1055;
 
 // user32 functions
 extern "user32" fn RegisterClassExW(lpWndClass: *const WNDCLASSEXW) callconv(.c) ATOM;
@@ -219,6 +240,10 @@ extern "user32" fn TrackPopupMenu(hMenu: HMENU, uFlags: UINT, x: c_int, y: c_int
 extern "user32" fn SetForegroundWindow(hWnd: HWND) callconv(.c) BOOL;
 extern "user32" fn GetCursorPos(lpPoint: *POINT) callconv(.c) BOOL;
 extern "user32" fn PostMessageW(hWnd: ?HWND, msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) BOOL;
+extern "user32" fn MonitorFromWindow(hwnd: HWND, dwFlags: DWORD) callconv(.c) ?*anyopaque;
+extern "user32" fn GetMonitorInfoW(hMonitor: *anyopaque, lpmi: *MONITORINFO) callconv(.c) BOOL;
+extern "user32" fn GetForegroundWindow() callconv(.c) ?HWND;
+extern "user32" fn EnumDisplayMonitors(hdc: ?HDC, lprcClip: ?*const RECT, lpfnEnum: *const fn (?*anyopaque, ?HDC, ?*RECT, isize) callconv(.c) c_int, dwData: isize) callconv(.c) BOOL;
 
 // shell32 functions
 extern "shell32" fn Shell_NotifyIconW(dwMessage: DWORD, lpData: *NOTIFYICONDATAW) callconv(.c) BOOL;
@@ -231,6 +256,11 @@ extern "kernel32" fn GlobalLock(hMem: HANDLE) callconv(.c) ?[*]u8;
 extern "kernel32" fn GlobalUnlock(hMem: HANDLE) callconv(.c) BOOL;
 extern "kernel32" fn GlobalSize(hMem: HANDLE) callconv(.c) usize;
 extern "kernel32" fn Sleep(dwMilliseconds: DWORD) callconv(.c) void;
+extern "kernel32" fn CreateFileW(lpFileName: [*:0]const u16, dwDesiredAccess: DWORD, dwShareMode: DWORD, lpSecurityAttributes: ?*anyopaque, dwCreationDisposition: DWORD, dwFlagsAndAttributes: DWORD, hTemplateFile: ?HANDLE) callconv(.c) ?HANDLE;
+extern "kernel32" fn WriteFile(hFile: HANDLE, lpBuffer: [*]const u8, nNumberOfBytesToWrite: DWORD, lpNumberOfBytesWritten: ?*DWORD, lpOverlapped: ?*anyopaque) callconv(.c) BOOL;
+extern "kernel32" fn CloseHandle(hObject: HANDLE) callconv(.c) BOOL;
+extern "kernel32" fn GetEnvironmentVariableW(lpName: [*:0]const u16, lpBuffer: [*]u16, nSize: DWORD) callconv(.c) DWORD;
+extern "kernel32" fn CreateDirectoryW(lpPathName: [*:0]const u16, lpSecurityAttributes: ?*anyopaque) callconv(.c) BOOL;
 extern "user32" fn EnumClipboardFormats(format: UINT) callconv(.c) UINT;
 
 // gdi32 functions
@@ -250,6 +280,7 @@ var g_current_position: NotifPosition = .bottom_right;
 var g_current_scale: NotifScale = .x2;
 var g_current_key: OverrideKey = .right_ctrl;
 var g_suppress_next_clipboard: bool = false;
+var g_current_monitor: MonitorMode = .current_screen;
 
 const EventQueue = struct {
     events: [16]Event = [_]Event{.none} ** 16,
@@ -370,6 +401,7 @@ pub fn init(config: Config) !Context {
     g_current_position = config.notif_position;
     g_current_scale = config.notif_scale;
     g_current_key = config.override_key;
+    g_current_monitor = config.notif_monitor;
 
     var ctx: Context = .{
         .msg_window = msg_window,
@@ -431,6 +463,7 @@ pub fn deinit(ctx: *Context) void {
 }
 
 fn showTrayMenu(hwnd: HWND) void {
+    @setEvalBranchQuota(5000);
     const menu = CreatePopupMenu() orelse return;
     const dur_submenu = CreatePopupMenu() orelse {
         _ = DestroyMenu(menu);
@@ -448,6 +481,14 @@ fn showTrayMenu(hwnd: HWND) void {
         return;
     };
     const key_submenu = CreatePopupMenu() orelse {
+        _ = DestroyMenu(scale_submenu);
+        _ = DestroyMenu(pos_submenu);
+        _ = DestroyMenu(dur_submenu);
+        _ = DestroyMenu(menu);
+        return;
+    };
+    const mon_submenu = CreatePopupMenu() orelse {
+        _ = DestroyMenu(key_submenu);
         _ = DestroyMenu(scale_submenu);
         _ = DestroyMenu(pos_submenu);
         _ = DestroyMenu(dur_submenu);
@@ -505,6 +546,20 @@ fn showTrayMenu(hwnd: HWND) void {
         _ = AppendMenuW(key_submenu, flags, item.id, item.label);
     }
 
+    // Build monitor submenu
+    const mon_items = [_]struct { id: UINT, label: [*:0]const u16, mode: MonitorMode }{
+        .{ .id = IDM_MON_CURRENT, .label = std.unicode.utf8ToUtf16LeStringLiteral("Current Screen"), .mode = .current_screen },
+        .{ .id = IDM_MON_PRIMARY, .label = std.unicode.utf8ToUtf16LeStringLiteral("Primary"), .mode = .primary },
+        .{ .id = IDM_MON_1, .label = std.unicode.utf8ToUtf16LeStringLiteral("Monitor 1"), .mode = .monitor_1 },
+        .{ .id = IDM_MON_2, .label = std.unicode.utf8ToUtf16LeStringLiteral("Monitor 2"), .mode = .monitor_2 },
+        .{ .id = IDM_MON_3, .label = std.unicode.utf8ToUtf16LeStringLiteral("Monitor 3"), .mode = .monitor_3 },
+        .{ .id = IDM_MON_4, .label = std.unicode.utf8ToUtf16LeStringLiteral("Monitor 4"), .mode = .monitor_4 },
+    };
+    for (mon_items) |item| {
+        const flags: UINT = MF_STRING | (if (g_current_monitor == item.mode) MF_CHECKED else @as(UINT, 0));
+        _ = AppendMenuW(mon_submenu, flags, item.id, item.label);
+    }
+
     // Build main menu
     const notif_flags: UINT = MF_STRING | (if (g_notif_enabled) MF_CHECKED else @as(UINT, 0));
     _ = AppendMenuW(menu, notif_flags, IDM_TOGGLE_NOTIF, std.unicode.utf8ToUtf16LeStringLiteral("Notifications"));
@@ -531,6 +586,7 @@ fn showTrayMenu(hwnd: HWND) void {
     _ = AppendMenuW(menu, MF_STRING | MF_POPUP, @intFromPtr(pos_submenu), std.unicode.utf8ToUtf16LeStringLiteral("Position"));
     _ = AppendMenuW(menu, MF_STRING | MF_POPUP, @intFromPtr(scale_submenu), std.unicode.utf8ToUtf16LeStringLiteral("Scale"));
     _ = AppendMenuW(menu, MF_STRING | MF_POPUP, @intFromPtr(key_submenu), std.unicode.utf8ToUtf16LeStringLiteral("Override Key"));
+    _ = AppendMenuW(menu, MF_STRING | MF_POPUP, @intFromPtr(mon_submenu), std.unicode.utf8ToUtf16LeStringLiteral("Monitor"));
 
     _ = AppendMenuW(menu, MF_SEPARATOR, 0, null);
     _ = AppendMenuW(menu, MF_STRING, IDM_QUIT, std.unicode.utf8ToUtf16LeStringLiteral("Quit"));
@@ -545,6 +601,7 @@ fn showTrayMenu(hwnd: HWND) void {
     const cmd_raw: c_int = @intFromEnum(cmd);
     const cmd_id: UINT = @intCast(cmd_raw);
 
+    _ = DestroyMenu(mon_submenu);
     _ = DestroyMenu(key_submenu);
     _ = DestroyMenu(scale_submenu);
     _ = DestroyMenu(pos_submenu);
@@ -640,6 +697,30 @@ fn showTrayMenu(hwnd: HWND) void {
         IDM_KEY_F12 => {
             g_current_key = .f12;
             g_event_queue.push(.tray_key_f12);
+        },
+        IDM_MON_CURRENT => {
+            g_current_monitor = .current_screen;
+            g_event_queue.push(.tray_monitor_current);
+        },
+        IDM_MON_PRIMARY => {
+            g_current_monitor = .primary;
+            g_event_queue.push(.tray_monitor_primary);
+        },
+        IDM_MON_1 => {
+            g_current_monitor = .monitor_1;
+            g_event_queue.push(.tray_monitor_1);
+        },
+        IDM_MON_2 => {
+            g_current_monitor = .monitor_2;
+            g_event_queue.push(.tray_monitor_2);
+        },
+        IDM_MON_3 => {
+            g_current_monitor = .monitor_3;
+            g_event_queue.push(.tray_monitor_3);
+        },
+        IDM_MON_4 => {
+            g_current_monitor = .monitor_4;
+            g_event_queue.push(.tray_monitor_4);
         },
         else => {},
     }
@@ -804,6 +885,74 @@ pub fn restoreClipboard(ctx: *Context, _: []const u8) !void {
     _ = CloseClipboard();
 }
 
+const MonitorEnumData = struct {
+    target_index: u32,
+    current_index: u32 = 0,
+    result: RECT = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+    found: bool = false,
+};
+
+fn monitorEnumProc(hMonitor: ?*anyopaque, _: ?HDC, _: ?*RECT, dwData: isize) callconv(.c) c_int {
+    const data: *MonitorEnumData = @ptrFromInt(@as(usize, @bitCast(dwData)));
+    data.current_index += 1;
+    if (data.current_index == data.target_index) {
+        if (hMonitor) |mon| {
+            var mi: MONITORINFO = .{
+                .rcMonitor = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+                .rcWork = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+                .dwFlags = 0,
+            };
+            if (GetMonitorInfoW(mon, &mi) != .FALSE) {
+                data.result = mi.rcWork;
+                data.found = true;
+                return 0; // stop enumeration
+            }
+        }
+    }
+    return 1; // continue
+}
+
+fn getNotifRect(ctx: *Context, config: Config) RECT {
+    switch (config.notif_monitor) {
+        .current_screen => {
+            const fg = GetForegroundWindow() orelse {
+                return .{ .left = 0, .top = 0, .right = ctx.screen_width, .bottom = ctx.screen_height };
+            };
+            const mon = MonitorFromWindow(fg, MONITOR_DEFAULTTOPRIMARY) orelse {
+                return .{ .left = 0, .top = 0, .right = ctx.screen_width, .bottom = ctx.screen_height };
+            };
+            var mi: MONITORINFO = .{
+                .rcMonitor = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+                .rcWork = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+                .dwFlags = 0,
+            };
+            if (GetMonitorInfoW(mon, &mi) != .FALSE) {
+                return mi.rcWork;
+            }
+            return .{ .left = 0, .top = 0, .right = ctx.screen_width, .bottom = ctx.screen_height };
+        },
+        .primary => {
+            return .{ .left = 0, .top = 0, .right = ctx.screen_width, .bottom = ctx.screen_height };
+        },
+        .monitor_1, .monitor_2, .monitor_3, .monitor_4 => {
+            const target: u32 = switch (config.notif_monitor) {
+                .monitor_1 => 1,
+                .monitor_2 => 2,
+                .monitor_3 => 3,
+                .monitor_4 => 4,
+                else => unreachable,
+            };
+            var data: MonitorEnumData = .{ .target_index = target };
+            _ = EnumDisplayMonitors(null, null, &monitorEnumProc, @bitCast(@intFromPtr(&data)));
+            if (data.found) {
+                return data.result;
+            }
+            // Fallback to primary
+            return .{ .left = 0, .top = 0, .right = ctx.screen_width, .bottom = ctx.screen_height };
+        },
+    }
+}
+
 pub fn showOverlay(ctx: *Context, alpha: f32, y_offset: f32, x_offset: f32, kind: NotifKind) !void {
     const s: i32 = @intCast(ctx.overlay_size);
     const margin: i32 = 16;
@@ -891,14 +1040,19 @@ pub fn showOverlayStack(ctx: *Context, entries: *const [8]?StackEntry, config: C
     const strip_w: i32 = si + jitter_max;
     const strip_h: i32 = si + travel;
 
+    // Get work area for target monitor
+    const work = getNotifRect(ctx, config);
+    const work_w = work.right - work.left;
+    const work_h = work.bottom - work.top;
+
     // Position the strip window
     const strip_x: i32 = switch (config.notif_position) {
-        .top_right, .bottom_right => ctx.screen_width - strip_w - margin,
-        .top_left, .bottom_left => margin,
+        .top_right, .bottom_right => work.left + work_w - strip_w - margin,
+        .top_left, .bottom_left => work.left + margin,
     };
     const strip_y: i32 = switch (config.notif_position) {
-        .top_right, .top_left => margin,
-        .bottom_right, .bottom_left => ctx.screen_height - strip_h - margin,
+        .top_right, .top_left => work.top + margin,
+        .bottom_right, .bottom_left => work.top + work_h - strip_h - margin,
     };
 
     _ = MoveWindow(ctx.overlay_window, strip_x, strip_y, strip_w, strip_h, .FALSE);
@@ -993,6 +1147,7 @@ pub fn updateConfig(ctx: *Context, config: Config) void {
     g_current_scale = config.notif_scale;
     g_current_key = config.override_key;
     g_block_duration_secs = config.block_duration_ms / 1000;
+    g_current_monitor = config.notif_monitor;
 }
 
 pub fn getFd(_: *const Context) ?i32 {
@@ -1012,4 +1167,72 @@ pub fn peekMessage() bool {
 
 pub fn sleep(ms: u32) void {
     Sleep(ms);
+}
+
+pub fn saveConfig(config: Config) void {
+    const config_mod = @import("../config.zig");
+    // Get %APPDATA%
+    var appdata_buf: [512]u16 = undefined;
+    const appdata_len = GetEnvironmentVariableW(
+        std.unicode.utf8ToUtf16LeStringLiteral("APPDATA"),
+        &appdata_buf,
+        appdata_buf.len,
+    );
+    if (appdata_len == 0 or appdata_len >= appdata_buf.len - 32) return;
+
+    // Build directory path: %APPDATA%\paste-protector
+    var dir_buf: [512]u16 = undefined;
+    var dir_pos: usize = 0;
+    for (appdata_buf[0..appdata_len]) |ch| {
+        if (dir_pos >= dir_buf.len - 1) return;
+        dir_buf[dir_pos] = ch;
+        dir_pos += 1;
+    }
+    const dir_suffix = std.unicode.utf8ToUtf16LeStringLiteral("\\paste-protector");
+    for (dir_suffix) |ch| {
+        if (dir_pos >= dir_buf.len - 1) return;
+        dir_buf[dir_pos] = ch;
+        dir_pos += 1;
+    }
+    dir_buf[dir_pos] = 0;
+
+    // Create directory (ignore error if exists)
+    _ = CreateDirectoryW(@ptrCast(&dir_buf), null);
+
+    // Build file path: %APPDATA%\paste-protector\config.toml
+    var file_buf: [512]u16 = undefined;
+    var file_pos: usize = 0;
+    for (dir_buf[0..dir_pos]) |ch| {
+        if (file_pos >= file_buf.len - 1) return;
+        file_buf[file_pos] = ch;
+        file_pos += 1;
+    }
+    const file_suffix = std.unicode.utf8ToUtf16LeStringLiteral("\\config.toml");
+    for (file_suffix) |ch| {
+        if (file_pos >= file_buf.len - 1) return;
+        file_buf[file_pos] = ch;
+        file_pos += 1;
+    }
+    file_buf[file_pos] = 0;
+
+    // Format TOML content
+    var toml_buf: [1024]u8 = undefined;
+    const toml_len = config_mod.formatToml(config, &toml_buf);
+    if (toml_len == 0) return;
+
+    // Write file
+    const handle = CreateFileW(
+        @ptrCast(&file_buf),
+        GENERIC_WRITE,
+        0,
+        null,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        null,
+    ) orelse return;
+    if (handle == INVALID_HANDLE_VALUE) return;
+    defer _ = CloseHandle(handle);
+
+    var written: DWORD = 0;
+    _ = WriteFile(handle, toml_buf[0..toml_len].ptr, @intCast(toml_len), &written, null);
 }
