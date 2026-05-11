@@ -147,7 +147,14 @@ fn setClipboardText(text: []const u8) void {
 }
 
 fn clipboardHasText() bool {
-    if (OpenClipboard(null) == .FALSE) return false;
-    defer _ = CloseClipboard();
-    return GetClipboardData(CF_UNICODETEXT) != null;
+    for (0..10) |_| {
+        if (OpenClipboard(null) != .FALSE) {
+            defer _ = CloseClipboard();
+            return GetClipboardData(CF_UNICODETEXT) != null;
+        }
+        Sleep(1);
+    }
+    return false;
 }
+
+extern "kernel32" fn Sleep(dwMilliseconds: u32) callconv(.c) void;
