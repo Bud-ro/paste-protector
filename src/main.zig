@@ -8,14 +8,13 @@ const Monitor = @import("core/monitor.zig").Monitor;
 const Event = @import("core/monitor.zig").Event;
 const time_util = @import("time_util.zig");
 
-pub const std_options: std.Options = if (builtin.mode == .ReleaseSmall) .{
+pub const std_options: std.Options = if (builtin.mode == .Debug) .{} else .{
     .enable_segfault_handler = false,
     .signal_stack_size = null,
     .log_level = .err,
-} else .{};
+};
 
-// In ReleaseSmall, use a zero-overhead entry with no std.process.Init
-pub const main = if (builtin.mode == .ReleaseSmall) mainTiny else mainFull;
+pub const main = if (builtin.mode == .Debug) mainFull else mainTiny;
 
 fn mainTiny() void {
     var config = Config{};

@@ -3,21 +3,21 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSmall });
-    const tiny = b.option(bool, "tiny", "Minimize binary size aggressively") orelse false;
 
     const os = target.result.os.tag;
+    const is_release = optimize != .Debug;
 
     const mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
-        .optimize = if (tiny) .ReleaseSmall else optimize,
+        .optimize = optimize,
         .link_libc = if (os == .linux) true else null,
-        .strip = if (tiny) true else null,
-        .single_threaded = if (tiny) true else null,
-        .unwind_tables = if (tiny) .none else null,
-        .omit_frame_pointer = if (tiny) true else null,
-        .error_tracing = if (tiny) false else null,
-        .red_zone = if (tiny) true else null,
+        .strip = if (is_release) true else null,
+        .single_threaded = if (is_release) true else null,
+        .unwind_tables = if (is_release) .none else null,
+        .omit_frame_pointer = if (is_release) true else null,
+        .error_tracing = if (is_release) false else null,
+        .red_zone = if (is_release) true else null,
     });
 
     if (os == .linux) {
@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
         mod.linkFramework("CoreFoundation", .{});
     }
 
-    if (os == .windows and !tiny) {
+    if (os == .windows) {
         mod.addWin32ResourceFile(.{ .file = b.path("res/paste-protector.rc") });
     }
 
