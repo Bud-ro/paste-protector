@@ -92,9 +92,7 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
             },
             .override_key_pressed => {
                 if (blocker.onOverrideKey(now)) {
-                    if (blocker.getSavedContent()) |content| {
-                        monitor.restoreClipboard(content) catch {};
-                    }
+                    monitor.restoreClipboard(blocker.getSavedContent() orelse "") catch {};
                     clipboard_cleared.* = false;
                     if (config.notif_enabled) {
                         notifier.spawn(.copied, now);

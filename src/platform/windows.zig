@@ -773,8 +773,7 @@ pub fn clearClipboard(ctx: *Context) !void {
     // If count == 0 (clipboard was empty/unreadable), keep existing saved formats
 }
 
-pub fn restoreClipboard(ctx: *Context, content: []const u8) !void {
-    _ = content;
+pub fn restoreClipboard(ctx: *Context, _: []const u8) !void {
     if (ctx.saved_format_count == 0) return;
 
     g_suppress_next_clipboard = true;
