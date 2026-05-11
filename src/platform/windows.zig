@@ -351,8 +351,8 @@ pub fn init(config: Config) !Context {
 
     var bmi: BITMAPINFO = .{
         .bmiHeader = .{
-            .biWidth = 192,
-            .biHeight = -192, // top-down (max 4x scale = 192x192)
+            .biWidth = 240,
+            .biHeight = -960, // top-down, tall enough for stacked notifications
         },
     };
     var pixels: ?[*]u8 = null;
@@ -831,7 +831,7 @@ pub fn showOverlay(ctx: *Context, alpha: f32, y_offset: f32, x_offset: f32, kind
     // (DIB stride is fixed at 192 but overlay_size may be smaller)
     const sz_u = ctx.overlay_size;
     var local_pixels: [192 * 192 * 4]u8 = undefined;
-    render.renderNotification(&local_pixels, sz_u, sz_u, alpha, kind);
+    render.renderNotification(&local_pixels, sz_u, alpha, kind);
 
     if (ctx.pixels) |dib_pixels| {
         const dib_stride: u32 = 192 * 4;
@@ -862,6 +862,117 @@ fn openClipboardRetry() bool {
         Sleep(1);
     }
     return false;
+}
+
+const StackEntry = @import("../core/notifier.zig").Notifier.StackEntry;
+const DIB_W: u32 = 240;
+const DIB_H: u32 = 960;
+
+pub fn showOverlayStack(ctx: *Context, entries: *const [8]?StackEntry, config: Config) !void {
+    const s = ctx.overlay_size;
+    const si: i32 = @intCast(s);
+    const margin: i32 = 16;
+
+    // Count active entries and find bounding box
+    var count: u32 = 0;
+    var min_y_off: f32 = 0;
+    var max_jitter: f32 = 0;
+    for (entries) |maybe| {
+        if (maybe) |e| {
+            count += 1;
+            if (e.y_offset < min_y_off) min_y_off = e.y_offset;
+            if (@abs(e.x_offset) > max_jitter) max_jitter = @abs(e.x_offset);
+        }
+    }
+    if (count == 0) return;
+
+    const jitter_max: i32 = @intFromFloat(max_jitter * @as(f32, @floatFromInt(si)) * 0.5);
+    const travel: i32 = @intFromFloat(@abs(min_y_off));
+    const strip_w: i32 = si + jitter_max;
+    const strip_h: i32 = si + travel;
+
+    // Position the strip window
+    const strip_x: i32 = switch (config.notif_position) {
+        .top_right, .bottom_right => ctx.screen_width - strip_w - margin,
+        .top_left, .bottom_left => margin,
+    };
+    const strip_y: i32 = switch (config.notif_position) {
+        .top_right, .top_left => margin,
+        .bottom_right, .bottom_left => ctx.screen_height - strip_h - margin,
+    };
+
+    _ = MoveWindow(ctx.overlay_window, strip_x, strip_y, strip_w, strip_h, .FALSE);
+
+    // Clear DIB
+    if (ctx.pixels) |dib| {
+        const clear_bytes = @min(DIB_W * @as(u32, @intCast(strip_h)) * 4, DIB_W * DIB_H * 4);
+        @memset(dib[0..clear_bytes], 0);
+
+        // Render each icon into a temp buffer, then blit to the DIB
+        var icon_buf: [192 * 192 * 4]u8 = undefined;
+
+        for (entries) |maybe| {
+            const e = maybe orelse continue;
+            render.renderNotification(&icon_buf, s, e.alpha, e.kind);
+
+            const jitter_px: u32 = @intFromFloat(@abs(e.x_offset) * @as(f32, @floatFromInt(si)) * 0.5);
+
+            // x position: jitter inward from edge
+            const icon_x: u32 = switch (config.notif_position) {
+                .top_right, .bottom_right => @intCast(@as(i32, @intCast(jitter_max)) - @as(i32, @intCast(jitter_px))),
+                .top_left, .bottom_left => jitter_px,
+            };
+
+            // y position based on y_offset within the strip
+            const icon_y: u32 = switch (config.notif_position) {
+                .top_right, .top_left => @intCast(@max(0, -@as(i32, @intFromFloat(e.y_offset)))),
+                .bottom_right, .bottom_left => @intCast(@max(0, travel + @as(i32, @intFromFloat(e.y_offset)))),
+            };
+
+            // Blit icon into DIB
+            for (0..s) |row| {
+                const dy = icon_y + @as(u32, @intCast(row));
+                if (dy >= @as(u32, @intCast(strip_h)) or dy >= DIB_H) break;
+                const dx_start = icon_x;
+                const dx_end = @min(icon_x + s, @min(@as(u32, @intCast(strip_w)), DIB_W));
+                if (dx_start >= dx_end) continue;
+                const w = dx_end - dx_start;
+
+                const src_off = row * s * 4;
+                const dst_off = dy * DIB_W * 4 + dx_start * 4;
+
+                // Alpha-composite each pixel
+                for (0..w) |col| {
+                    const si_off = src_off + col * 4;
+                    const di_off = dst_off + col * 4;
+                    const sa = icon_buf[si_off + 3];
+                    if (sa == 0) continue;
+                    if (dib[di_off + 3] == 0) {
+                        dib[di_off + 0] = icon_buf[si_off + 0];
+                        dib[di_off + 1] = icon_buf[si_off + 1];
+                        dib[di_off + 2] = icon_buf[si_off + 2];
+                        dib[di_off + 3] = sa;
+                    } else {
+                        const inv = 255 - @as(u16, sa);
+                        dib[di_off + 0] = @intCast((@as(u16, icon_buf[si_off + 0]) * 255 + @as(u16, dib[di_off + 0]) * inv) / 255);
+                        dib[di_off + 1] = @intCast((@as(u16, icon_buf[si_off + 1]) * 255 + @as(u16, dib[di_off + 1]) * inv) / 255);
+                        dib[di_off + 2] = @intCast((@as(u16, icon_buf[si_off + 2]) * 255 + @as(u16, dib[di_off + 2]) * inv) / 255);
+                        dib[di_off + 3] = @intCast(@min(255, @as(u16, dib[di_off + 3]) + @as(u16, sa) * (255 - @as(u16, dib[di_off + 3])) / 255));
+                    }
+                }
+            }
+        }
+    }
+
+    if (!ctx.overlay_visible) {
+        _ = ShowWindow(ctx.overlay_window, 8);
+        ctx.overlay_visible = true;
+    }
+
+    var pt_src: POINT = .{ .x = 0, .y = 0 };
+    var sz: SIZE = .{ .cx = @min(strip_w, @as(i32, DIB_W)), .cy = @min(strip_h, @as(i32, DIB_H)) };
+    var blend: BLENDFUNCTION = .{ .SourceConstantAlpha = 255 };
+    _ = UpdateLayeredWindow(ctx.overlay_window, null, null, &sz, ctx.mem_dc, &pt_src, 0, &blend, ULW_ALPHA);
 }
 
 pub fn hideOverlay(ctx: *Context) !void {

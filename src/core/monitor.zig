@@ -42,6 +42,11 @@ pub const Monitor = struct {
         return platform.hideOverlay(&self.platform_ctx);
     }
 
+    const Notifier = @import("notifier.zig").Notifier;
+    pub fn showOverlayStack(self: *Monitor, entries: *const [8]?Notifier.StackEntry, config: @import("../config.zig").Config) !void {
+        return platform.showOverlayStack(&self.platform_ctx, entries, config);
+    }
+
     pub fn getFd(self: *const Monitor) ?platform.FdType {
         return platform.getFd(&self.platform_ctx);
     }

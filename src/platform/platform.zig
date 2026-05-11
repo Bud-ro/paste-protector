@@ -74,6 +74,20 @@ pub fn hideOverlay(ctx: *Context) !void {
     return impl.hideOverlay(ctx);
 }
 
+const Notifier = @import("../core/notifier.zig").Notifier;
+pub fn showOverlayStack(ctx: *Context, entries: *const [8]?Notifier.StackEntry, config: Config) !void {
+    if (@hasDecl(impl, "showOverlayStack")) {
+        return impl.showOverlayStack(ctx, entries, config);
+    }
+    // Fallback: show newest
+    for (0..8) |ri| {
+        const i = 7 - ri;
+        if (entries[i]) |e| {
+            return impl.showOverlay(ctx, e.alpha, e.y_offset, e.x_offset, e.kind);
+        }
+    }
+}
+
 pub fn updateConfig(ctx: *Context, config: @import("../config.zig").Config) void {
     if (@hasDecl(impl, "updateConfig")) {
         impl.updateConfig(ctx, config);

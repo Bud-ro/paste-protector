@@ -24,16 +24,23 @@ test "tick returns state" {
     try std.testing.expect(state.alpha > 0);
 }
 
-test "spawn stacks notifications" {
+test "spawn stacks same-kind notifications" {
+    var n = Notifier.init(Config{});
+    n.spawn(.copied, T0);
+    n.spawn(.copied, T0 + 100 * MS);
+    n.spawn(.copied, T0 + 200 * MS);
+    var entries: [8]?Notifier.StackEntry = undefined;
+    const count = n.tickAll(T0 + 200 * MS, &entries);
+    try std.testing.expectEqual(3, count);
+}
+
+test "spawn different kind clears previous" {
     var n = Notifier.init(Config{});
     n.spawn(.copied, T0);
     n.spawn(.override_hint, T0 + 100 * MS);
-    // Both exist — tick returns the first active one
-    try std.testing.expect(n.tick(T0 + 100 * MS) != null);
-    // Both should be active
     var entries: [8]?Notifier.StackEntry = undefined;
     const count = n.tickAll(T0 + 100 * MS, &entries);
-    try std.testing.expectEqual(2, count);
+    try std.testing.expectEqual(1, count);
 }
 
 test "expires after duration" {
@@ -60,11 +67,11 @@ test "y_offset moves over time" {
     try std.testing.expect(late < early);
 }
 
-test "alpha at start is near 0.9" {
+test "alpha at start is near 1.0" {
     var n = Notifier.init(Config{});
     n.spawn(.copied, T0);
     const state = n.tick(T0).?;
-    try std.testing.expect(state.alpha >= 0.89 and state.alpha <= 0.91);
+    try std.testing.expect(state.alpha >= 0.99 and state.alpha <= 1.01);
 }
 
 test "y_offset at start is near 0" {

@@ -73,7 +73,13 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
                     }
                 }
             },
-            .tray_quit => return error.QuitRequested,
+            .tray_quit => {
+                // Restore clipboard if we cleared it
+                if (clipboard_cleared.*) {
+                    monitor.restoreClipboard(blocker.getSavedContent() orelse "") catch {};
+                }
+                return error.QuitRequested;
+            },
             .tray_toggle_notif => config.notif_enabled = !config.notif_enabled,
             .tray_toggle_block => {
                 config.block_enabled = !config.block_enabled;
@@ -116,8 +122,15 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
         }
     }
 
-    if (notifier.tick(now)) |state| {
-        monitor.showOverlay(state.alpha, state.y_offset, state.x_offset, state.kind) catch {};
+    if (notifier.isActive()) {
+        const Notif = @import("core/notifier.zig").Notifier;
+        var entries: [8]?Notif.StackEntry = undefined;
+        const count = notifier.tickAll(now, &entries);
+        if (count > 0) {
+            monitor.showOverlayStack(&entries, config.*) catch {};
+        } else {
+            monitor.hideOverlay() catch {};
+        }
     } else {
         monitor.hideOverlay() catch {};
     }

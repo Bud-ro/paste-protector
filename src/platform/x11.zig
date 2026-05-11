@@ -371,7 +371,7 @@ fn renderOverlay(ctx: *Context, alpha: f32, kind: NotifKind) void {
     const needed = stride * s;
     if (needed > pixels.len) return;
 
-    render.renderNotification(&pixels, s, s, alpha, kind);
+    render.renderNotification(&pixels, s, alpha, kind);
 
     const image = c.XCreateImage(
         ctx.display,
