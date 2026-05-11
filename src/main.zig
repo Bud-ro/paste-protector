@@ -42,6 +42,7 @@ fn run() void {
 
 fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, config: *Config, clipboard_cleared: *bool) !void {
     const now = time_util.nanoTimestamp();
+    const screen = monitor.getCurrentScreen(config.*);
 
     while (true) {
         const event = try monitor.poll();
@@ -53,12 +54,12 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
                     clipboard_cleared.* = false;
                 }
                 if (config.notif_enabled) {
-                    notifier.spawn(.copied, now);
+                    notifier.spawnOnScreen(.copied, now, screen);
                 }
             },
             .paste_attempted => {
                 if (blocker.isPasteBlocked() and config.notif_enabled) {
-                    notifier.spawn(.override_hint, now);
+                    notifier.spawnOnScreen(.override_hint, now, screen);
                 }
                 if (config.paste_resets_timer and !blocker.isPasteBlocked()) {
                     blocker.onPasteAttempted(now);
@@ -69,7 +70,7 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
                     monitor.restoreClipboard(blocker.getSavedContent() orelse "") catch {};
                     clipboard_cleared.* = false;
                     if (config.notif_enabled) {
-                        notifier.spawn(.copied, now);
+                        notifier.spawnOnScreen(.copied, now, screen);
                     }
                 }
             },

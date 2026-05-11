@@ -6,11 +6,19 @@ pub const NotifKind = enum {
     override_hint,
 };
 
+pub const ScreenRect = struct {
+    x: i32 = 0,
+    y: i32 = 0,
+    w: i32 = 1920,
+    h: i32 = 1080,
+};
+
 pub const Notification = struct {
     kind: NotifKind,
     start_ns: i128,
     duration_ns: i128,
     x_jitter: f32 = 0,
+    screen: ScreenRect = .{},
 
     pub fn progress(self: *const Notification, now: i128) f32 {
         const elapsed = now - self.start_ns;
@@ -57,6 +65,10 @@ pub const Notifier = struct {
     }
 
     pub fn spawn(self: *Notifier, kind: NotifKind, now: i128) void {
+        self.spawnOnScreen(kind, now, .{});
+    }
+
+    pub fn spawnOnScreen(self: *Notifier, kind: NotifKind, now: i128, screen: ScreenRect) void {
         const dur = switch (kind) {
             .copied => self.duration_ns,
             .override_hint => 6000 * std.time.ns_per_ms,
@@ -77,7 +89,7 @@ pub const Notifier = struct {
         var oldest_start: i128 = std.math.maxInt(i128);
         for (self.slots, 0..) |slot, i| {
             if (slot == null) {
-                self.slots[i] = .{ .kind = kind, .start_ns = now, .duration_ns = dur, .x_jitter = jitter };
+                self.slots[i] = .{ .kind = kind, .start_ns = now, .duration_ns = dur, .x_jitter = jitter, .screen = screen };
                 return;
             }
             if (slot.?.start_ns < oldest_start) {
@@ -85,7 +97,7 @@ pub const Notifier = struct {
                 oldest_idx = i;
             }
         }
-        self.slots[oldest_idx] = .{ .kind = kind, .start_ns = now, .duration_ns = dur, .x_jitter = jitter };
+        self.slots[oldest_idx] = .{ .kind = kind, .start_ns = now, .duration_ns = dur, .x_jitter = jitter, .screen = screen };
     }
 
     pub fn tick(self: *Notifier, now: i128) ?TickResult {
@@ -114,25 +126,49 @@ pub const Notifier = struct {
         y_offset: f32,
         x_offset: f32,
         kind: NotifKind,
+        screen: ScreenRect,
     };
 
+    // Returns entries sorted oldest-first so newest renders on top
     pub fn tickAll(self: *Notifier, now: i128, out: *[MAX_STACK]?StackEntry) u32 {
-        var count: u32 = 0;
         @memset(out, null);
+
+        // Collect active notifications with their start times
+        var active: [MAX_STACK]struct { idx: usize, start: i128 } = undefined;
+        var count: u32 = 0;
+
         for (&self.slots, 0..) |*slot, i| {
             const notif = &(slot.* orelse continue);
             if (notif.isExpired(now)) {
                 slot.* = null;
                 continue;
             }
+            active[count] = .{ .idx = i, .start = notif.start_ns };
+            count += 1;
+        }
+
+        // Sort by start_ns ascending (oldest first → renders first → newest on top)
+        for (0..count) |i| {
+            for (i + 1..count) |j| {
+                if (active[j].start < active[i].start) {
+                    const tmp = active[i];
+                    active[i] = active[j];
+                    active[j] = tmp;
+                }
+            }
+        }
+
+        for (0..count) |i| {
+            const notif = &(self.slots[active[i].idx].?);
             out.*[i] = .{
                 .alpha = notif.alpha(now),
                 .y_offset = notif.yOffset(now),
                 .x_offset = notif.x_jitter,
                 .kind = notif.kind,
+                .screen = notif.screen,
             };
-            count += 1;
         }
+
         return count;
     }
 
@@ -142,5 +178,4 @@ pub const Notifier = struct {
         }
         return false;
     }
-
 };

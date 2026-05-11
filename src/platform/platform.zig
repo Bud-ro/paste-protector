@@ -80,6 +80,15 @@ pub fn hideOverlay(ctx: *Context) !void {
     return impl.hideOverlay(ctx);
 }
 
+pub const ScreenRect = @import("../core/notifier.zig").ScreenRect;
+
+pub fn getCurrentScreen(ctx: *Context, config: Config) ScreenRect {
+    if (@hasDecl(impl, "getCurrentScreen")) {
+        return impl.getCurrentScreen(ctx, config);
+    }
+    return .{};
+}
+
 const Notifier = @import("../core/notifier.zig").Notifier;
 pub fn showOverlayStack(ctx: *Context, entries: *const [8]?Notifier.StackEntry, config: Config) !void {
     if (@hasDecl(impl, "showOverlayStack")) {

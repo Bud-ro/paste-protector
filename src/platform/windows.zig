@@ -208,6 +208,7 @@ const IDM_MON_1: UINT = 1052;
 const IDM_MON_2: UINT = 1053;
 const IDM_MON_3: UINT = 1054;
 const IDM_MON_4: UINT = 1055;
+const IDM_OPEN_CONFIG: UINT = 1060;
 
 // user32 functions
 extern "user32" fn RegisterClassExW(lpWndClass: *const WNDCLASSEXW) callconv(.c) ATOM;
@@ -247,6 +248,7 @@ extern "user32" fn EnumDisplayMonitors(hdc: ?HDC, lprcClip: ?*const RECT, lpfnEn
 
 // shell32 functions
 extern "shell32" fn Shell_NotifyIconW(dwMessage: DWORD, lpData: *NOTIFYICONDATAW) callconv(.c) BOOL;
+extern "shell32" fn ShellExecuteW(hwnd: ?HWND, lpOperation: [*:0]const u16, lpFile: [*:0]const u16, lpParameters: ?[*:0]const u16, lpDirectory: ?[*:0]const u16, nShowCmd: c_int) callconv(.c) ?*anyopaque;
 
 // kernel32 functions
 extern "kernel32" fn GetModuleHandleW(lpModuleName: ?[*:0]const u16) callconv(.c) ?HINSTANCE;
@@ -588,6 +590,7 @@ fn showTrayMenu(hwnd: HWND) void {
     _ = AppendMenuW(menu, MF_STRING | MF_POPUP, @intFromPtr(key_submenu), std.unicode.utf8ToUtf16LeStringLiteral("Override Key"));
     _ = AppendMenuW(menu, MF_STRING | MF_POPUP, @intFromPtr(mon_submenu), std.unicode.utf8ToUtf16LeStringLiteral("Monitor"));
 
+    _ = AppendMenuW(menu, MF_STRING, IDM_OPEN_CONFIG, std.unicode.utf8ToUtf16LeStringLiteral("Open Config Folder"));
     _ = AppendMenuW(menu, MF_SEPARATOR, 0, null);
     _ = AppendMenuW(menu, MF_STRING, IDM_QUIT, std.unicode.utf8ToUtf16LeStringLiteral("Quit"));
 
@@ -624,6 +627,9 @@ fn showTrayMenu(hwnd: HWND) void {
         IDM_PASTE_RESETS => {
             g_paste_resets = !g_paste_resets;
             g_event_queue.push(.tray_toggle_paste_resets);
+        },
+        IDM_OPEN_CONFIG => {
+            openConfigFolder();
         },
         IDM_QUIT => g_event_queue.push(.tray_quit),
         IDM_DURATION_1S => {
@@ -724,6 +730,46 @@ fn showTrayMenu(hwnd: HWND) void {
         },
         else => {},
     }
+}
+
+fn openConfigFolder() void {
+    // Build %APPDATA%\paste-protector path
+    var appdata_buf: [512]u16 = undefined;
+    const appdata_len = GetEnvironmentVariableW(
+        std.unicode.utf8ToUtf16LeStringLiteral("APPDATA"),
+        &appdata_buf,
+        appdata_buf.len,
+    );
+    if (appdata_len == 0 or appdata_len >= appdata_buf.len - 32) return;
+
+    var path_buf: [512]u16 = undefined;
+    var pos: usize = 0;
+    for (appdata_buf[0..appdata_len]) |ch| {
+        if (pos >= path_buf.len - 1) return;
+        path_buf[pos] = ch;
+        pos += 1;
+    }
+    const suffix = std.unicode.utf8ToUtf16LeStringLiteral("\\paste-protector");
+    for (suffix) |ch| {
+        if (pos >= path_buf.len - 1) return;
+        path_buf[pos] = ch;
+        pos += 1;
+    }
+    path_buf[pos] = 0;
+
+    // Create directory if needed (ignore error if exists)
+    _ = CreateDirectoryW(@ptrCast(&path_buf), null);
+
+    // Open folder in Explorer
+    const SW_SHOW: c_int = 5;
+    _ = ShellExecuteW(
+        null,
+        std.unicode.utf8ToUtf16LeStringLiteral("open"),
+        @ptrCast(&path_buf),
+        null,
+        null,
+        SW_SHOW,
+    );
 }
 
 fn wndProc(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) callconv(.c) LRESULT {
@@ -953,6 +999,16 @@ fn getNotifRect(ctx: *Context, config: Config) RECT {
     }
 }
 
+pub fn getCurrentScreen(ctx: *Context, config: Config) @import("../core/notifier.zig").ScreenRect {
+    const rect = getNotifRect(ctx, config);
+    return .{
+        .x = rect.left,
+        .y = rect.top,
+        .w = rect.right - rect.left,
+        .h = rect.bottom - rect.top,
+    };
+}
+
 pub fn showOverlay(ctx: *Context, alpha: f32, y_offset: f32, x_offset: f32, kind: NotifKind) !void {
     const s: i32 = @intCast(ctx.overlay_size);
     const margin: i32 = 16;
@@ -1040,19 +1096,27 @@ pub fn showOverlayStack(ctx: *Context, entries: *const [8]?StackEntry, config: C
     const strip_w: i32 = si + jitter_max;
     const strip_h: i32 = si + travel;
 
-    // Get work area for target monitor
-    const work = getNotifRect(ctx, config);
-    const work_w = work.right - work.left;
-    const work_h = work.bottom - work.top;
+    // Get work area from first entry's screen rect
+    var first_screen: @import("../core/notifier.zig").ScreenRect = .{};
+    for (entries) |maybe| {
+        if (maybe) |e| {
+            first_screen = e.screen;
+            break;
+        }
+    }
+    const work_x = first_screen.x;
+    const work_y = first_screen.y;
+    const work_w = first_screen.w;
+    const work_h = first_screen.h;
 
     // Position the strip window
     const strip_x: i32 = switch (config.notif_position) {
-        .top_right, .bottom_right => work.left + work_w - strip_w - margin,
-        .top_left, .bottom_left => work.left + margin,
+        .top_right, .bottom_right => work_x + work_w - strip_w - margin,
+        .top_left, .bottom_left => work_x + margin,
     };
     const strip_y: i32 = switch (config.notif_position) {
-        .top_right, .top_left => work.top + margin,
-        .bottom_right, .bottom_left => work.top + work_h - strip_h - margin,
+        .top_right, .top_left => work_y + margin,
+        .bottom_right, .bottom_left => work_y + work_h - strip_h - margin,
     };
 
     _ = MoveWindow(ctx.overlay_window, strip_x, strip_y, strip_w, strip_h, .FALSE);

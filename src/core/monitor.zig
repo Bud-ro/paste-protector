@@ -42,6 +42,10 @@ pub const Monitor = struct {
         return platform.hideOverlay(&self.platform_ctx);
     }
 
+    pub fn getCurrentScreen(self: *Monitor, config: @import("../config.zig").Config) @import("notifier.zig").ScreenRect {
+        return platform.getCurrentScreen(&self.platform_ctx, config);
+    }
+
     const Notifier = @import("notifier.zig").Notifier;
     pub fn showOverlayStack(self: *Monitor, entries: *const [8]?Notifier.StackEntry, config: @import("../config.zig").Config) !void {
         return platform.showOverlayStack(&self.platform_ctx, entries, config);
