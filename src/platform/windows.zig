@@ -722,7 +722,7 @@ fn freeSavedFormats(ctx: *Context) void {
 }
 
 pub fn clearClipboard(ctx: *Context) !void {
-    if (OpenClipboard(null) == .FALSE) return error.OpenClipboardFailed;
+    if (!openClipboardRetry()) return error.OpenClipboardFailed;
 
     // Save current clipboard formats into a temp array
     var new_formats: [16]SavedFormat = [_]SavedFormat{.{}} ** 16;
@@ -777,7 +777,7 @@ pub fn restoreClipboard(ctx: *Context, _: []const u8) !void {
     if (ctx.saved_format_count == 0) return;
 
     g_suppress_next_clipboard = true;
-    if (OpenClipboard(null) == .FALSE) {
+    if (!openClipboardRetry()) {
         g_suppress_next_clipboard = false;
         return error.OpenClipboardFailed;
     }
@@ -854,6 +854,14 @@ pub fn showOverlay(ctx: *Context, alpha: f32, y_offset: f32, x_offset: f32, kind
         .SourceConstantAlpha = @intFromFloat(alpha * 255.0),
     };
     _ = UpdateLayeredWindow(ctx.overlay_window, null, null, &sz, ctx.mem_dc, &pt_src, 0, &blend, ULW_ALPHA);
+}
+
+fn openClipboardRetry() bool {
+    for (0..10) |_| {
+        if (OpenClipboard(null) != .FALSE) return true;
+        Sleep(1);
+    }
+    return false;
 }
 
 pub fn hideOverlay(ctx: *Context) !void {
