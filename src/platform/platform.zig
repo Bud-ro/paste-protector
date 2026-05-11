@@ -1,0 +1,87 @@
+const builtin = @import("builtin");
+const Config = @import("../config.zig").Config;
+const NotifKind = @import("../core/notifier.zig").NotifKind;
+const std = @import("std");
+
+const impl = switch (builtin.os.tag) {
+    .linux => @import("x11.zig"),
+    .windows => @import("windows.zig"),
+    .macos => @import("macos.zig"),
+    else => @compileError("unsupported platform"),
+};
+
+pub const Context = impl.Context;
+
+pub const Event = enum {
+    copy_detected,
+    paste_attempted,
+    override_key_pressed,
+    tray_quit,
+    tray_toggle_notif,
+    tray_toggle_block,
+    tray_toggle_paste_resets,
+    tray_duration_1s,
+    tray_duration_3s,
+    tray_duration_5s,
+    tray_duration_10s,
+    tray_duration_30s,
+    tray_pos_top_left,
+    tray_pos_top_right,
+    tray_pos_bottom_left,
+    tray_pos_bottom_right,
+    tray_scale_1x,
+    tray_scale_1_5x,
+    tray_scale_2x,
+    tray_scale_3x,
+    tray_scale_4x,
+    tray_key_rctrl,
+    tray_key_ralt,
+    tray_key_rshift,
+    tray_key_f12,
+    none,
+};
+
+pub fn init(config: Config) !Context {
+    return impl.init(config);
+}
+
+pub fn deinit(ctx: *Context) void {
+    impl.deinit(ctx);
+}
+
+pub fn pollEvent(ctx: *Context) !Event {
+    return impl.pollEvent(ctx);
+}
+
+pub fn getClipboardContent(ctx: *Context) !?[]const u8 {
+    return impl.getClipboardContent(ctx);
+}
+
+pub fn clearClipboard(ctx: *Context) !void {
+    return impl.clearClipboard(ctx);
+}
+
+pub fn restoreClipboard(ctx: *Context, content: []const u8) !void {
+    return impl.restoreClipboard(ctx, content);
+}
+
+pub fn showOverlay(ctx: *Context, alpha: f32, y_offset: f32, x_offset: f32, kind: NotifKind) !void {
+    return impl.showOverlay(ctx, alpha, y_offset, x_offset, kind);
+}
+
+
+pub fn hideOverlay(ctx: *Context) !void {
+    return impl.hideOverlay(ctx);
+}
+
+pub fn updateConfig(ctx: *Context, config: @import("../config.zig").Config) void {
+    if (@hasDecl(impl, "updateConfig")) {
+        impl.updateConfig(ctx, config);
+    }
+}
+
+pub const FdType = if (builtin.os.tag == .windows) i32 else std.posix.fd_t;
+
+pub fn getFd(ctx: *const Context) ?FdType {
+    return impl.getFd(ctx);
+}
