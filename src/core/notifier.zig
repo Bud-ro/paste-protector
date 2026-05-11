@@ -20,12 +20,12 @@ pub const Notification = struct {
 
     pub fn alpha(self: *const Notification, now: i128) f32 {
         const t = self.progress(now);
-        return 0.9 * (1.0 - easeOutExpo(t));
+        return 0.9 * (1.0 - easeInCubic(t));
     }
 
     pub fn yOffset(self: *const Notification, now: i128) f32 {
         const t = self.progress(now);
-        return -40.0 * easeOutExpo(t);
+        return -40.0 * easeInCubic(t);
     }
 
     pub fn isExpired(self: *const Notification, now: i128) bool {
@@ -33,9 +33,8 @@ pub const Notification = struct {
     }
 };
 
-fn easeOutExpo(t: f32) f32 {
-    if (t >= 1.0) return 1.0;
-    return 1.0 - @exp2(-10.0 * t);
+fn easeInCubic(t: f32) f32 {
+    return t * t * t;
 }
 
 pub const TickResult = struct {
@@ -60,7 +59,7 @@ pub const Notifier = struct {
     pub fn spawn(self: *Notifier, kind: NotifKind, now: i128) void {
         const dur = switch (kind) {
             .copied => self.duration_ns,
-            .override_hint => 3000 * std.time.ns_per_ms,
+            .override_hint => 6000 * std.time.ns_per_ms,
         };
 
         // Derive x jitter from timestamp — varies by [-0.5, 0.5] (normalized)

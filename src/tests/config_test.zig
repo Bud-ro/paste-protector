@@ -10,7 +10,7 @@ test "defaults" {
     try std.testing.expectEqual(5000, c.block_duration_ms);
     try std.testing.expectEqual(.right_ctrl, c.override_key);
     try std.testing.expectEqual(.bottom_right, c.notif_position);
-    try std.testing.expectEqual(1200, c.notif_duration_ms);
+    try std.testing.expectEqual(2400, c.notif_duration_ms);
     try std.testing.expect(c.notif_enabled);
     try std.testing.expect(c.block_enabled);
     try std.testing.expect(c.paste_resets_timer);

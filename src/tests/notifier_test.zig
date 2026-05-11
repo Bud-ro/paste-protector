@@ -39,8 +39,8 @@ test "spawn stacks notifications" {
 test "expires after duration" {
     var n = Notifier.init(Config{});
     n.spawn(.copied, T0);
-    try std.testing.expect(n.tick(T0 + 1199 * MS) != null);
-    try std.testing.expect(n.tick(T0 + 1200 * MS) == null);
+    try std.testing.expect(n.tick(T0 + 2399 * MS) != null);
+    try std.testing.expect(n.tick(T0 + 2400 * MS) == null);
     try std.testing.expect(!n.isActive());
 }
 
