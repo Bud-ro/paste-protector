@@ -9,50 +9,47 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-windows
-            os: ubuntu-latest
-            artifact: paste-protector.exe
-          - target: x86_64-linux
-            os: ubuntu-latest
-            artifact: paste-protector
-            deps: libx11-dev libxfixes-dev libxrender-dev
-    runs-on: ${{ matrix.os }}
+  build-windows:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
-
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxfixes-dev libxrender-dev
-
       - name: Build
-        run: zig build -Doptimize=ReleaseSmall -Dtarget=${{ matrix.target }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        run: zig build -Doptimize=ReleaseSmall -Dtarget=x86_64-windows
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}
-          path: zig-out/bin/${{ matrix.artifact }}
+          name: windows
+          path: zig-out/bin/paste-protector.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Install X11 deps
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxfixes-dev libxrender-dev
+      - name: Build
+        run: zig build -Doptimize=ReleaseSmall
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: zig-out/bin/paste-protector
 
   release:
-    needs: build
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/x86_64-windows/paste-protector.exe
-            artifacts/x86_64-linux/paste-protector
+            artifacts/windows/paste-protector.exe
+            artifacts/linux/paste-protector
           generate_release_notes: true
