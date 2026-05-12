@@ -11,26 +11,23 @@ param(
     [int]$Height = 300
 )
 
-Write-Host "Recording bottom-right ${Width}x${Height} for ${Duration}s..."
-Write-Host "Copy some text now to trigger notifications!"
+Add-Type -AssemblyName System.Windows.Forms
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$offsetX = $screen.Width - $Width
+$offsetY = $screen.Height - $Height
+
+Write-Host "Screen: $($screen.Width)x$($screen.Height)"
+Write-Host "Capturing: ${Width}x${Height} at offset ${offsetX},${offsetY}"
+Write-Host "Recording for ${Duration}s — copy some text to see notifications!"
 Write-Host ""
 
-ffmpeg -y -f gdigrab -framerate 30 -video_size "${Width}x${Height}" `
-    -offset_x -$Width -offset_y -$Height -i desktop `
+ffmpeg -y -f gdigrab -framerate 30 `
+    -offset_x $offsetX -offset_y $offsetY `
+    -video_size "${Width}x${Height}" -i desktop `
     -t $Duration -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p `
-    $Output 2>$null
+    $Output
 
 if ($LASTEXITCODE -eq 0) {
     $size = [math]::Round((Get-Item $Output).Length / 1KB)
-    Write-Host "Saved: $Output (${size}KB)"
-} else {
-    Write-Host "Failed. Trying without offset..."
-    ffmpeg -y -f gdigrab -framerate 30 -video_size "${Width}x${Height}" `
-        -i desktop -t $Duration -c:v libx264 -preset fast -crf 23 `
-        -pix_fmt yuv420p $Output 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Saved: $Output (top-left fallback)"
-    } else {
-        Write-Host "ffmpeg gdigrab failed. Install ffmpeg: winget install ffmpeg"
-    }
+    Write-Host "`nSaved: $Output (${size}KB)"
 }
