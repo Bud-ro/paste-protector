@@ -234,6 +234,7 @@ extern "user32" fn GetSystemMetrics(nIndex: c_int) callconv(.c) c_int;
 extern "user32" fn GetDC(hWnd: ?HWND) callconv(.c) ?HDC;
 extern "user32" fn ReleaseDC(hWnd: ?HWND, hDC: HDC) callconv(.c) c_int;
 extern "user32" fn LoadIconW(hInstance: ?HINSTANCE, lpIconName: usize) callconv(.c) ?HICON;
+extern "user32" fn LoadImageW(hInst: ?HINSTANCE, name: usize, img_type: UINT, cx: c_int, cy: c_int, fuLoad: UINT) callconv(.c) ?HICON;
 extern "user32" fn CreatePopupMenu() callconv(.c) ?HMENU;
 extern "user32" fn CreateMenu() callconv(.c) ?HMENU;
 extern "user32" fn DestroyMenu(hMenu: HMENU) callconv(.c) BOOL;
@@ -427,10 +428,13 @@ pub fn init(config: Config) !Context {
     return ctx;
 }
 
+const IMAGE_ICON: UINT = 1;
+const LR_DEFAULTSIZE: UINT = 0x00000040;
+
 fn initTray(ctx: *Context) void {
     const hinstance = GetModuleHandleW(null);
-    // Load icon from embedded resource (ID 1 in .rc file)
-    const icon = LoadIconW(hinstance, 1) orelse LoadIconW(null, 32512);
+    // Load 16x16 icon from embedded resource for tray
+    const icon = LoadImageW(hinstance, 1, IMAGE_ICON, 16, 16, LR_DEFAULTSIZE) orelse LoadIconW(null, 32512);
 
     ctx.tray_data = .{
         .hWnd = ctx.msg_window,
