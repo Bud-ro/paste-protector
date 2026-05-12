@@ -36,6 +36,7 @@ if (-not $pp) {
 }
 
 # Record the bottom-right corner of the screen (where notifications appear)
+Add-Type -AssemblyName System.Windows.Forms
 $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
 $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
 $offsetX = $screenWidth - $Width
