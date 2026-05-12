@@ -29,5 +29,6 @@ ffmpeg -y -f gdigrab -framerate 30 `
 
 if ($LASTEXITCODE -eq 0) {
     $size = [math]::Round((Get-Item $Output).Length / 1KB)
-    Write-Host "`nSaved: $Output (${size}KB)"
+    Write-Host ""
+    Write-Host "Saved: $Output ($size KB)"
 }
