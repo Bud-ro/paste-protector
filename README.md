@@ -4,7 +4,7 @@ A <128KB clipboard daemon that adds copy feedback and clears stale clipboard con
 
 Copy something, get a checkmark. Wait a few seconds, clipboard is cleared. Press Right Ctrl to get it back.
 
-<video src="https://github.com/Bud-ro/paste-protector/raw/master/assets/demo.mp4" width="500"></video>
+![Demo](assets/demo.gif)
 
 ## Platform Support
 
