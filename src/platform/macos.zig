@@ -379,7 +379,7 @@ pub fn pollEvent(ctx: *Context) !Event {
             TAG_NOTIF => {
                 g_notif_enabled = !g_notif_enabled;
                 updateMenuCheckmarks();
-                g_event_queue.push(.tray_toggle_notif);
+                g_event_queue.push(.tray_toggle_notif_copy);
             },
             TAG_BLOCK => {
                 g_block_enabled = !g_block_enabled;

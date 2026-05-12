@@ -53,12 +53,12 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
                     blocker.onCopyDetected(content, now);
                     clipboard_cleared.* = false;
                 }
-                if (config.notif_enabled) {
+                if (config.notif_copy) {
                     notifier.spawnOnScreen(.copied, now, screen);
                 }
             },
             .paste_attempted => {
-                if (blocker.isPasteBlocked() and config.notif_enabled) {
+                if (blocker.isPasteBlocked() and config.notif_blocked) {
                     notifier.spawnOnScreen(.override_hint, now, screen);
                 }
                 if (config.paste_resets_timer and !blocker.isPasteBlocked()) {
@@ -69,7 +69,7 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
                 if (blocker.onOverrideKey(now)) {
                     monitor.restoreClipboard(blocker.getSavedContent() orelse "") catch {};
                     clipboard_cleared.* = false;
-                    if (config.notif_enabled) {
+                    if (config.notif_copy) {
                         notifier.spawnOnScreen(.copied, now, screen);
                     }
                 }
@@ -81,7 +81,8 @@ fn processEvents(monitor: *Monitor, blocker: *Blocker, notifier: *Notifier, conf
                 }
                 return error.QuitRequested;
             },
-            .tray_toggle_notif => config.notif_enabled = !config.notif_enabled,
+            .tray_toggle_notif_copy => config.notif_copy = !config.notif_copy,
+            .tray_toggle_notif_blocked => config.notif_blocked = !config.notif_blocked,
             .tray_toggle_block => {
                 config.block_enabled = !config.block_enabled;
                 if (!config.block_enabled) {

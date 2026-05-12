@@ -50,7 +50,8 @@ pub const Config = struct {
     override_key: OverrideKey = .right_ctrl,
     notif_position: NotifPosition = .bottom_right,
     notif_duration_ms: u32 = 2400,
-    notif_enabled: bool = true,
+    notif_copy: bool = true,
+    notif_blocked: bool = true,
     notif_scale: NotifScale = .x2,
     block_enabled: bool = true,
     paste_resets_timer: bool = true,
@@ -110,8 +111,15 @@ pub const Config = struct {
                 config.notif_position = parsePosition(val);
             } else if (std.mem.eql(u8, key, "notif_duration_ms")) {
                 config.notif_duration_ms = std.fmt.parseInt(u32, val, 10) catch config.notif_duration_ms;
+            } else if (std.mem.eql(u8, key, "notif_copy")) {
+                config.notif_copy = parseBool(val);
+            } else if (std.mem.eql(u8, key, "notif_blocked")) {
+                config.notif_blocked = parseBool(val);
             } else if (std.mem.eql(u8, key, "notif_enabled")) {
-                config.notif_enabled = parseBool(val);
+                // Legacy: sets both
+                const v = parseBool(val);
+                config.notif_copy = v;
+                config.notif_blocked = v;
             } else if (std.mem.eql(u8, key, "notif_scale")) {
                 config.notif_scale = parseScale(val);
             } else if (std.mem.eql(u8, key, "block_enabled")) {
@@ -214,9 +222,12 @@ pub fn formatToml(config: Config, buf: []u8) usize {
     pos = appendU32(buf, pos, config.notif_duration_ms);
     pos = appendStr(buf, pos, "\n");
 
-    // notif_enabled
-    pos = appendStr(buf, pos, "notif_enabled = ");
-    pos = appendStr(buf, pos, if (config.notif_enabled) "true" else "false");
+    pos = appendStr(buf, pos, "notif_copy = ");
+    pos = appendStr(buf, pos, if (config.notif_copy) "true" else "false");
+    pos = appendStr(buf, pos, "\n");
+
+    pos = appendStr(buf, pos, "notif_blocked = ");
+    pos = appendStr(buf, pos, if (config.notif_blocked) "true" else "false");
     pos = appendStr(buf, pos, "\n");
 
     // notif_scale

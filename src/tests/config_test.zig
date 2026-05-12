@@ -12,7 +12,8 @@ test "defaults" {
     try std.testing.expectEqual(.right_ctrl, c.override_key);
     try std.testing.expectEqual(.bottom_right, c.notif_position);
     try std.testing.expectEqual(2400, c.notif_duration_ms);
-    try std.testing.expect(c.notif_enabled);
+    try std.testing.expect(c.notif_copy);
+    try std.testing.expect(c.notif_blocked);
     try std.testing.expect(c.block_enabled);
     try std.testing.expect(c.paste_resets_timer);
     try std.testing.expectEqual(.x2, c.notif_scale);
@@ -24,7 +25,8 @@ test "parse all fields" {
         \\override_key = "RightAlt"
         \\notif_position = "top-left"
         \\notif_duration_ms = 2000
-        \\notif_enabled = false
+        \\notif_copy = false
+        \\notif_blocked = false
         \\block_enabled = false
         \\paste_resets_timer = false
         \\notif_scale = "3"
@@ -33,7 +35,8 @@ test "parse all fields" {
     try std.testing.expectEqual(.right_alt, c.override_key);
     try std.testing.expectEqual(.top_left, c.notif_position);
     try std.testing.expectEqual(2000, c.notif_duration_ms);
-    try std.testing.expect(!c.notif_enabled);
+    try std.testing.expect(!c.notif_copy);
+    try std.testing.expect(!c.notif_blocked);
     try std.testing.expect(!c.block_enabled);
     try std.testing.expect(!c.paste_resets_timer);
     try std.testing.expectEqual(.x3, c.notif_scale);
@@ -149,16 +152,19 @@ test "unknown keys ignored" {
 
 test "boolean edge cases" {
     const c1 = Config.parseForTest("notif_enabled = true");
-    try std.testing.expect(c1.notif_enabled);
+    try std.testing.expect(c1.notif_copy);
+    try std.testing.expect(c1.notif_blocked);
 
     const c2 = Config.parseForTest("notif_enabled = false");
-    try std.testing.expect(!c2.notif_enabled);
+    try std.testing.expect(!c2.notif_copy);
+    try std.testing.expect(!c2.notif_blocked);
 
-    const c3 = Config.parseForTest("notif_enabled = TRUE");
-    try std.testing.expect(!c3.notif_enabled);
+    const c3 = Config.parseForTest("notif_copy = true\nnotif_blocked = false");
+    try std.testing.expect(c3.notif_copy);
+    try std.testing.expect(!c3.notif_blocked);
 
     const c4 = Config.parseForTest("notif_enabled = 1");
-    try std.testing.expect(!c4.notif_enabled);
+    try std.testing.expect(!c4.notif_copy);
 }
 
 test "scale factor values" {
@@ -203,7 +209,8 @@ test "formatToml produces valid TOML" {
     try std.testing.expect(std.mem.indexOf(u8, output, "block_duration_ms = 5000") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "override_key = \"RightCtrl\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "notif_position = \"bottom-right\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "notif_enabled = true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "notif_copy = true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "notif_blocked = true") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "notif_scale = \"2\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "block_enabled = true") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "paste_resets_timer = true") != null);
@@ -220,7 +227,8 @@ test "formatToml roundtrip default config" {
     try std.testing.expectEqual(original.override_key, parsed.override_key);
     try std.testing.expectEqual(original.notif_position, parsed.notif_position);
     try std.testing.expectEqual(original.notif_duration_ms, parsed.notif_duration_ms);
-    try std.testing.expectEqual(original.notif_enabled, parsed.notif_enabled);
+    try std.testing.expectEqual(original.notif_copy, parsed.notif_copy);
+    try std.testing.expectEqual(original.notif_blocked, parsed.notif_blocked);
     try std.testing.expectEqual(original.notif_scale, parsed.notif_scale);
     try std.testing.expectEqual(original.block_enabled, parsed.block_enabled);
     try std.testing.expectEqual(original.paste_resets_timer, parsed.paste_resets_timer);
@@ -233,7 +241,8 @@ test "formatToml roundtrip non-default config" {
         .override_key = .f12,
         .notif_position = .top_left,
         .notif_duration_ms = 1234,
-        .notif_enabled = false,
+        .notif_copy = false,
+        .notif_blocked = false,
         .notif_scale = .x1_5,
         .block_enabled = false,
         .paste_resets_timer = false,
@@ -247,7 +256,8 @@ test "formatToml roundtrip non-default config" {
     try std.testing.expectEqual(original.override_key, parsed.override_key);
     try std.testing.expectEqual(original.notif_position, parsed.notif_position);
     try std.testing.expectEqual(original.notif_duration_ms, parsed.notif_duration_ms);
-    try std.testing.expectEqual(original.notif_enabled, parsed.notif_enabled);
+    try std.testing.expectEqual(original.notif_copy, parsed.notif_copy);
+    try std.testing.expectEqual(original.notif_blocked, parsed.notif_blocked);
     try std.testing.expectEqual(original.notif_scale, parsed.notif_scale);
     try std.testing.expectEqual(original.block_enabled, parsed.block_enabled);
     try std.testing.expectEqual(original.paste_resets_timer, parsed.paste_resets_timer);

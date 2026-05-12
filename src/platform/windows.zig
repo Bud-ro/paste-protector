@@ -180,7 +180,8 @@ const TPM_RETURNCMD: UINT = 0x0100;
 const TPM_RIGHTBUTTON: UINT = 0x0002;
 
 // Menu item IDs
-const IDM_TOGGLE_NOTIF: UINT = 1001;
+const IDM_TOGGLE_NOTIF_COPY: UINT = 1001;
+const IDM_TOGGLE_NOTIF_BLOCKED: UINT = 1006;
 const IDM_TOGGLE_BLOCK: UINT = 1002;
 const IDM_QUIT: UINT = 1003;
 const IDM_PASTE_RESETS: UINT = 1004;
@@ -274,7 +275,8 @@ extern "gdi32" fn DeleteObject(ho: *anyopaque) callconv(.c) BOOL;
 
 // Global state for the window procedure callback
 var g_event_queue: EventQueue = .{};
-var g_notif_enabled: bool = true;
+var g_notif_copy: bool = true;
+var g_notif_blocked: bool = true;
 var g_block_enabled: bool = true;
 var g_block_duration_secs: u32 = 3;
 var g_paste_resets: bool = true;
@@ -396,7 +398,8 @@ pub fn init(config: Config) !Context {
     }
 
     // Initialize global state for menu checkmarks
-    g_notif_enabled = config.notif_enabled;
+    g_notif_copy = config.notif_copy;
+    g_notif_blocked = config.notif_blocked;
     g_block_enabled = config.block_enabled;
     g_block_duration_secs = config.block_duration_ms / 1000;
     g_paste_resets = config.paste_resets_timer;
@@ -563,8 +566,11 @@ fn showTrayMenu(hwnd: HWND) void {
     }
 
     // Build main menu
-    const notif_flags: UINT = MF_STRING | (if (g_notif_enabled) MF_CHECKED else @as(UINT, 0));
-    _ = AppendMenuW(menu, notif_flags, IDM_TOGGLE_NOTIF, std.unicode.utf8ToUtf16LeStringLiteral("Notifications"));
+    const copy_notif_flags: UINT = MF_STRING | (if (g_notif_copy) MF_CHECKED else @as(UINT, 0));
+    _ = AppendMenuW(menu, copy_notif_flags, IDM_TOGGLE_NOTIF_COPY, std.unicode.utf8ToUtf16LeStringLiteral("Copy Notifications"));
+
+    const blocked_notif_flags: UINT = MF_STRING | (if (g_notif_blocked) MF_CHECKED else @as(UINT, 0));
+    _ = AppendMenuW(menu, blocked_notif_flags, IDM_TOGGLE_NOTIF_BLOCKED, std.unicode.utf8ToUtf16LeStringLiteral("Blocked Notifications"));
 
     const block_flags: UINT = MF_STRING | (if (g_block_enabled) MF_CHECKED else @as(UINT, 0));
     _ = AppendMenuW(menu, block_flags, IDM_TOGGLE_BLOCK, std.unicode.utf8ToUtf16LeStringLiteral("Paste Protection"));
@@ -616,9 +622,13 @@ fn showTrayMenu(hwnd: HWND) void {
 
     // Handle the selected command
     switch (cmd_id) {
-        IDM_TOGGLE_NOTIF => {
-            g_notif_enabled = !g_notif_enabled;
-            g_event_queue.push(.tray_toggle_notif);
+        IDM_TOGGLE_NOTIF_COPY => {
+            g_notif_copy = !g_notif_copy;
+            g_event_queue.push(.tray_toggle_notif_copy);
+        },
+        IDM_TOGGLE_NOTIF_BLOCKED => {
+            g_notif_blocked = !g_notif_blocked;
+            g_event_queue.push(.tray_toggle_notif_blocked);
         },
         IDM_TOGGLE_BLOCK => {
             g_block_enabled = !g_block_enabled;
@@ -1204,7 +1214,8 @@ pub fn updateConfig(ctx: *Context, config: Config) void {
     ctx.overlay_size = config.notif_scale.size();
     ctx.notif_position = config.notif_position;
     // Update global state for menu checkmarks
-    g_notif_enabled = config.notif_enabled;
+    g_notif_copy = config.notif_copy;
+    g_notif_blocked = config.notif_blocked;
     g_block_enabled = config.block_enabled;
     g_paste_resets = config.paste_resets_timer;
     g_current_position = config.notif_position;

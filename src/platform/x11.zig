@@ -221,7 +221,7 @@ pub fn pollEvent(ctx: *Context) !Event {
     if (ev.type == c.ButtonPress and ctx.has_tray) {
         const btn: *const c.XButtonEvent = @ptrCast(&ev);
         if (btn.window == ctx.tray_window) {
-            if (btn.button == 1) return .tray_toggle_notif;
+            if (btn.button == 1) return .tray_toggle_notif_copy;
             if (btn.button == 3) return .tray_quit;
         }
     }
