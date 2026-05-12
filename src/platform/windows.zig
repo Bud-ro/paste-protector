@@ -428,13 +428,9 @@ pub fn init(config: Config) !Context {
     return ctx;
 }
 
-const IMAGE_ICON: UINT = 1;
-const LR_DEFAULTSIZE: UINT = 0x00000040;
-
 fn initTray(ctx: *Context) void {
     const hinstance = GetModuleHandleW(null);
-    // Load 16x16 icon from embedded resource for tray
-    const icon = LoadImageW(hinstance, 1, IMAGE_ICON, 16, 16, LR_DEFAULTSIZE) orelse LoadIconW(null, 32512);
+    const icon = LoadIconW(hinstance, 1) orelse LoadIconW(null, 32512);
 
     ctx.tray_data = .{
         .hWnd = ctx.msg_window,
